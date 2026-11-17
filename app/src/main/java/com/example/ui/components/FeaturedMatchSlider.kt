@@ -34,11 +34,15 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.ChevronLeft
+import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -64,12 +68,8 @@ import coil.request.ImageRequest
 import com.example.data.model.BroadcastSource
 import com.example.data.model.MergedBroadcastGame
 import com.example.data.model.NewsArticle
-import com.example.ui.theme.BroadcastCyan
-import com.example.ui.theme.ElectricLime
+import com.example.data.network.SportsRepository
 import com.example.ui.theme.LiveCrimson
-import com.example.ui.theme.MidnightBg
-import com.example.ui.theme.MidnightBorder
-import com.example.ui.theme.MidnightSurface
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -142,11 +142,7 @@ fun FeaturedMatchSlider(
                     FeaturedSlideItem(
                         id = "news_${article.id}",
                         title = article.title,
-                        subtitle = if (article.publishedAtFa.isNotBlank()) {
-                            "${article.sourceName} · ${article.publishedAtFa}"
-                        } else {
-                            article.sourceName
-                        },
+                        subtitle = "${article.sourceName} · ${article.publishedAtFa}",
                         leagueLabel = article.category.labelFa,
                         isLive = false,
                         imageUrl = article.imageUrl,
@@ -158,10 +154,16 @@ fun FeaturedMatchSlider(
 
     if (slides.isEmpty()) {
         if (isLoading) {
-            MatchSkeletonLoader(
-                variant = MatchSkeletonVariant.HERO_CARD,
-                modifier = modifier.padding(horizontal = 16.dp)
-            )
+            Box(
+                modifier = modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp)
+                    .aspectRatio(16f / 9f)
+                    .clip(RoundedCornerShape(24.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+            ) {
+                PosterShimmerOverlay(modifier = Modifier.fillMaxSize())
+            }
         }
         return
     }
@@ -184,11 +186,81 @@ fun FeaturedMatchSlider(
     }
 
     Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .testTag("featured_match_slider"),
+        modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = if (games.isNotEmpty()) "پوستر بازی‌های روز" else "گزارش تصویری روز",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.ExtraBold,
+                color = MaterialTheme.colorScheme.onBackground
+            )
+
+            if (slides.size > 1) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    IconButton(
+                        onClick = {
+                            scope.launch {
+                                val prev = if (pagerState.currentPage == 0) slides.lastIndex else pagerState.currentPage - 1
+                                pagerState.animateScrollToPage(
+                                    page = prev,
+                                    animationSpec = tween(460, easing = FastOutSlowInEasing)
+                                )
+                            }
+                        },
+                        modifier = Modifier
+                            .minimumInteractiveComponentSize()
+                            .testTag("poster_slider_prev")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.ChevronRight,
+                            contentDescription = "پوستر قبلی",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
+                    RollingScoreText(
+                        text = "${SportsRepository.toPersianDigits(pagerState.currentPage + 1)} / ${SportsRepository.toPersianDigits(slides.size)}",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 4.dp)
+                    )
+                    IconButton(
+                        onClick = {
+                            scope.launch {
+                                val next = (pagerState.currentPage + 1) % slides.size
+                                pagerState.animateScrollToPage(
+                                    page = next,
+                                    animationSpec = tween(460, easing = FastOutSlowInEasing)
+                                )
+                            }
+                        },
+                        modifier = Modifier
+                            .minimumInteractiveComponentSize()
+                            .testTag("poster_slider_next")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.ChevronLeft,
+                            contentDescription = "پوستر بعدی",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(22.dp)
+                        )
+                    }
+                }
+            }
+        }
+
         HorizontalPager(
             state = pagerState,
             contentPadding = PaddingValues(horizontal = 16.dp),
@@ -290,158 +362,155 @@ private fun FeaturedPosterCard(
     ) {
         Surface(
             modifier = Modifier
-                .widthIn(max = 520.dp)
+                .widthIn(max = 480.dp)
                 .fillMaxWidth()
                 .aspectRatio(16f / 9f)
                 .graphicsLayer {
-                    val scale = lerp(0.94f, 1f, fraction)
+                    val scale = lerp(0.93f, 1f, fraction)
                     scaleX = scale
                     scaleY = scale
-                    alpha = lerp(0.75f, 1f, fraction)
+                    alpha = lerp(0.74f, 1f, fraction)
                 }
-                .clip(RoundedCornerShape(18.dp))
+                .clip(RoundedCornerShape(24.dp))
                 .clickable(onClick = onClick)
                 .testTag("poster_slide_${slide.id}"),
-            shape = RoundedCornerShape(18.dp),
-            color = MidnightBg,
-            shadowElevation = if (fraction > 0.7f) 8.dp else 2.dp,
-            border = BorderStroke(
-                width = if (slide.isLive && fraction > 0.7f) 1.2.dp else 1.dp,
-                color = if (slide.isLive && fraction > 0.7f) LiveCrimson.copy(alpha = 0.75f)
-                else MidnightBorder
-            )
+            shape = RoundedCornerShape(24.dp),
+            color = Color(0xFF0E1015),
+            shadowElevation = if (fraction > 0.7f) 10.dp else 2.dp,
+            border = if (slide.isLive && fraction > 0.7f) {
+                BorderStroke(1.2.dp, LiveCrimson.copy(alpha = 0.65f))
+            } else null
         ) {
-            Box(modifier = Modifier.fillMaxSize()) {
-                val parallaxModifier = Modifier
-                    .fillMaxSize()
-                    .graphicsLayer {
-                        scaleX = 1.09f
-                        scaleY = 1.09f
-                        translationX = rawOffset.coerceIn(-1f, 1f) * -32f
-                    }
-
-                if (imageRequest != null) {
-                    SubcomposeAsyncImage(
-                        model = imageRequest,
-                        contentDescription = slide.title,
-                        contentScale = ContentScale.Crop,
-                        modifier = parallaxModifier,
-                        loading = {
-                            Box(modifier = Modifier.fillMaxSize()) {
-                                MatchupStudioBackdrop(slide = slide, modifier = Modifier.fillMaxSize())
-                                PosterShimmerOverlay(modifier = Modifier.fillMaxSize())
-                            }
-                        },
-                        error = {
-                            MatchupStudioBackdrop(slide = slide, modifier = Modifier.fillMaxSize())
-                        }
-                    )
-                } else {
-                    MatchupStudioBackdrop(
-                        slide = slide,
-                        modifier = parallaxModifier
-                    )
+        Box(modifier = Modifier.fillMaxSize()) {
+            val parallaxModifier = Modifier
+                .fillMaxSize()
+                .graphicsLayer {
+                    scaleX = 1.09f
+                    scaleY = 1.09f
+                    translationX = rawOffset.coerceIn(-1f, 1f) * -32f
                 }
 
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .fillMaxWidth()
-                        .height(112.dp)
-                        .background(
-                            Brush.verticalGradient(
-                                listOf(
-                                    Color.Transparent,
-                                    MidnightBg.copy(alpha = 0.94f)
-                                )
+            if (imageRequest != null) {
+                SubcomposeAsyncImage(
+                    model = imageRequest,
+                    contentDescription = slide.title,
+                    contentScale = ContentScale.Crop,
+                    modifier = parallaxModifier,
+                    loading = {
+                        Box(modifier = Modifier.fillMaxSize()) {
+                            MatchupStudioBackdrop(slide = slide, modifier = Modifier.fillMaxSize())
+                            PosterShimmerOverlay(modifier = Modifier.fillMaxSize())
+                        }
+                    },
+                    error = {
+                        MatchupStudioBackdrop(slide = slide, modifier = Modifier.fillMaxSize())
+                    }
+                )
+            } else {
+                MatchupStudioBackdrop(
+                    slide = slide,
+                    modifier = parallaxModifier
+                )
+            }
+
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .height(106.dp)
+                    .background(
+                        Brush.verticalGradient(
+                            listOf(
+                                Color.Transparent,
+                                Color(0xFF07080B).copy(alpha = 0.92f)
                             )
                         )
-                )
+                    )
+            )
 
-                Row(
-                    modifier = Modifier
-                        .align(Alignment.TopStart)
-                        .padding(12.dp),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    if (slide.isLive) {
-                        Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = LiveCrimson
+            Row(
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(12.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (slide.isLive) {
+                    Surface(
+                        shape = RoundedCornerShape(99.dp),
+                        color = LiveCrimson
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(4.dp)
-                            ) {
-                                LivePulseIndicator(color = Color.White, size = 6.dp)
-                                Text(
-                                    text = "زنده",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    color = Color.White
-                                )
-                            }
-                        }
-                    }
-                    slide.sources.forEach { src ->
-                        Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = MidnightBg.copy(alpha = 0.78f),
-                            border = BorderStroke(0.8.dp, MidnightBorder)
-                        ) {
+                            LivePulseDot(color = Color.White, size = 5.dp)
                             Text(
-                                text = src.badgeText,
+                                text = "زنده",
                                 style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.Bold,
-                                color = if (src == BroadcastSource.ANTEN) ElectricLime else BroadcastCyan,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                            )
-                        }
-                    }
-                    if (slide.leagueLabel.isNotBlank()) {
-                        Surface(
-                            shape = RoundedCornerShape(8.dp),
-                            color = MidnightBg.copy(alpha = 0.72f)
-                        ) {
-                            Text(
-                                text = slide.leagueLabel,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = Color.White.copy(alpha = 0.92f),
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                color = Color.White
                             )
                         }
                     }
                 }
-
-                Column(
-                    modifier = Modifier
-                        .align(Alignment.BottomStart)
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 14.dp),
-                    verticalArrangement = Arrangement.spacedBy(3.dp)
-                ) {
-                    Text(
-                        text = slide.title,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Black,
-                        color = Color.White,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Text(
-                        text = slide.subtitle,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = ElectricLime.copy(alpha = 0.9f),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
+                slide.sources.forEach { src ->
+                    Surface(
+                        shape = RoundedCornerShape(99.dp),
+                        color = Color(0xFF0A0B0E).copy(alpha = 0.72f)
+                    ) {
+                        Text(
+                            text = src.badgeText,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = if (src == BroadcastSource.ANTEN) Color(0xFF00E676) else Color(0xFFFFB300),
+                            modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp)
+                        )
+                    }
+                }
+                if (slide.leagueLabel.isNotBlank()) {
+                    Surface(
+                        shape = RoundedCornerShape(99.dp),
+                        color = Color(0xFF0A0B0E).copy(alpha = 0.62f)
+                    ) {
+                        Text(
+                            text = slide.leagueLabel,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color.White.copy(alpha = 0.92f),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp)
+                        )
+                    }
                 }
             }
+
+            Column(
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                verticalArrangement = Arrangement.spacedBy(3.dp)
+            ) {
+                Text(
+                    text = slide.title,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = Color.White,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = slide.subtitle,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color.White.copy(alpha = 0.8f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
         }
+    }
     }
 }
 
@@ -457,9 +526,9 @@ private fun MatchupStudioBackdrop(
         modifier = modifier.background(
             Brush.radialGradient(
                 colors = listOf(
-                    Color(0xFF1A2812),
-                    MidnightSurface,
-                    MidnightBg
+                    Color(0xFF143627),
+                    Color(0xFF0E141B),
+                    Color(0xFF090A0D)
                 )
             )
         ),
@@ -490,43 +559,39 @@ private fun MatchupStudioBackdrop(
                 horizontalArrangement = Arrangement.SpaceEvenly,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                TeamLogo(
+                TeamBadge(
                     logoUrl = slide.hostLogoUrl,
                     teamName = slide.hostName.ifBlank { slide.title },
-                    size = 56.dp,
-                    highlightBorder = true
+                    size = 56.dp
                 )
                 Surface(
                     shape = CircleShape,
-                    color = ElectricLime.copy(alpha = 0.14f),
-                    border = BorderStroke(1.dp, ElectricLime.copy(alpha = 0.4f))
+                    color = Color.White.copy(alpha = 0.1f)
                 ) {
                     Text(
                         text = "VS",
                         style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Black,
-                        color = ElectricLime,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = Color(0xFF00E676),
                         modifier = Modifier.padding(horizontal = 11.dp, vertical = 6.dp)
                     )
                 }
-                TeamLogo(
+                TeamBadge(
                     logoUrl = slide.guestLogoUrl,
                     teamName = slide.guestName.ifBlank { slide.title },
-                    size = 56.dp,
-                    highlightBorder = true
+                    size = 56.dp
                 )
             }
         } else {
             Surface(
                 shape = CircleShape,
-                color = ElectricLime.copy(alpha = 0.14f),
-                border = BorderStroke(1.dp, ElectricLime.copy(alpha = 0.4f)),
+                color = Color.White.copy(alpha = 0.08f),
                 modifier = Modifier.padding(bottom = 26.dp)
             ) {
                 Icon(
                     imageVector = Icons.Rounded.PlayArrow,
                     contentDescription = null,
-                    tint = ElectricLime,
+                    tint = Color(0xFF00E676),
                     modifier = Modifier
                         .padding(14.dp)
                         .size(32.dp)
@@ -538,6 +603,27 @@ private fun MatchupStudioBackdrop(
 
 @Composable
 private fun PosterShimmerOverlay(modifier: Modifier = Modifier) {
-    val brush = rememberBroadcastShimmerBrush()
-    Box(modifier = modifier.background(brush))
+    val transition = rememberInfiniteTransition(label = "posterShimmer")
+    val progress by transition.animateFloat(
+        initialValue = -0.5f,
+        targetValue = 1.5f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1200, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "shimmerProgress"
+    )
+    Box(
+        modifier = modifier.background(
+            Brush.linearGradient(
+                colors = listOf(
+                    Color.Transparent,
+                    Color.White.copy(alpha = 0.14f),
+                    Color.Transparent
+                ),
+                start = Offset(progress * 600f - 220f, 0f),
+                end = Offset(progress * 600f + 220f, 360f)
+            )
+        )
+    )
 }

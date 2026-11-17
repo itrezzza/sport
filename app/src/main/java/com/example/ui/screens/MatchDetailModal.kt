@@ -1,19 +1,22 @@
 package com.example.ui.screens
 
+import android.content.Intent
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -22,6 +25,7 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -29,22 +33,26 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.OpenInNew
 import androidx.compose.material.icons.outlined.NotificationsNone
-import androidx.compose.material.icons.rounded.ChevronLeft
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.NotificationsActive
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material.icons.rounded.Videocam
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.minimumInteractiveComponentSize
@@ -56,40 +64,33 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import androidx.core.net.toUri
 import com.example.R
-import com.example.data.model.LineupPlayer
 import com.example.data.model.LineupSide
 import com.example.data.model.MatchEvent
-import com.example.data.model.MatchSummary
-import com.example.data.model.TeamInfo
+import com.example.data.model.StatEntry
 import com.example.data.network.SportsRepository
-import com.example.ui.components.AnimatedScoreboard
-import com.example.ui.components.EmptyCrestLottie
-import com.example.ui.components.FavoriteTeamButton
-import com.example.ui.components.FootballPitchVisualization
-import com.example.ui.components.GoalEventAnimation
 import com.example.ui.components.InlineHighlightPlayer
-import com.example.ui.components.LivePulseIndicator
-import com.example.ui.components.MatchStatisticsPanel
-import com.example.ui.components.ScoreboardSize
-import com.example.ui.components.TeamLogo
+import com.example.ui.components.LivePulseDot
+import com.example.ui.components.RollingScoreText
+import com.example.ui.components.TeamBadge
 import com.example.ui.components.bouncyClickable
-import com.example.ui.components.rememberReducedMotionEnabled
 import com.example.ui.theme.AmberCard
-import com.example.ui.theme.BroadcastCyan
-import com.example.ui.theme.ElectricLime
 import com.example.ui.theme.GoldMotm
 import com.example.ui.theme.LiveCrimson
+import com.example.ui.theme.PitchLime
 import com.example.ui.viewmodel.DetailTab
 import com.example.ui.viewmodel.MatchDetailUiState
 
@@ -102,31 +103,30 @@ fun MatchDetailModal(
     onSelectTab: (DetailTab) -> Unit,
     onToggleHighlight: (MatchEvent) -> Unit,
     onCloseHighlight: () -> Unit,
-    onClose: () -> Unit,
-    onTeamClick: (TeamInfo, String, Int) -> Unit = { _, _, _ -> },
-    onPlayerClick: (LineupPlayer, String, String) -> Unit = { _, _, _ -> },
-    onPlayerNameClick: (String, String, String) -> Unit = { _, _, _ -> },
-    favoriteTeamNames: Set<String> = emptySet(),
-    onToggleFavoriteTeam: ((TeamInfo, String, Int) -> Unit)? = null
+    onClose: () -> Unit
 ) {
     val match = state.match ?: return
+    val context = LocalContext.current
 
     BackHandler { onClose() }
 
     Surface(
         modifier = Modifier
             .fillMaxSize()
-            .pointerInput(Unit) { detectTapGestures { } },
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = {}
+            ),
         color = MaterialTheme.colorScheme.background
     ) {
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .navigationBarsPadding()
-                .testTag("match_detail_list"),
+                .navigationBarsPadding(),
             contentPadding = PaddingValues(bottom = 28.dp)
         ) {
-            // Floodlight Stadium Scoreboard Header
+            // Seamless Stadium Scoreboard Hero + Floating Translucent Top Controls
             item(key = "detail_hero") {
                 Box(
                     modifier = Modifier
@@ -134,8 +134,8 @@ fun MatchDetailModal(
                         .background(
                             Brush.verticalGradient(
                                 colorStops = arrayOf(
-                                    0f to MaterialTheme.colorScheme.primary.copy(alpha = 0.16f),
-                                    0.5f to MaterialTheme.colorScheme.surface.copy(alpha = 0.6f),
+                                    0f to MaterialTheme.colorScheme.primary.copy(alpha = 0.24f),
+                                    0.55f to MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.28f),
                                     1f to MaterialTheme.colorScheme.background
                                 )
                             )
@@ -146,8 +146,9 @@ fun MatchDetailModal(
                     Column(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(14.dp)
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
+                        // Translucent Floating Controls Row
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically,
@@ -155,8 +156,8 @@ fun MatchDetailModal(
                         ) {
                             Surface(
                                 shape = CircleShape,
-                                color = MaterialTheme.colorScheme.surface,
-                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+                                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.78f),
+                                tonalElevation = 2.dp
                             ) {
                                 IconButton(
                                     onClick = onClose,
@@ -173,14 +174,14 @@ fun MatchDetailModal(
                             }
 
                             Surface(
-                                shape = RoundedCornerShape(10.dp),
-                                color = MaterialTheme.colorScheme.surface,
-                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+                                shape = RoundedCornerShape(99.dp),
+                                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.82f),
+                                tonalElevation = 2.dp
                             ) {
                                 Text(
                                     text = state.leagueTitle.ifBlank { "مرکز مسابقه" },
                                     style = MaterialTheme.typography.labelLarge,
-                                    fontWeight = FontWeight.ExtraBold,
+                                    fontWeight = FontWeight.Bold,
                                     color = MaterialTheme.colorScheme.primary,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,
@@ -193,13 +194,9 @@ fun MatchDetailModal(
                                 color = if (isWatched) {
                                     MaterialTheme.colorScheme.primaryContainer
                                 } else {
-                                    MaterialTheme.colorScheme.surface
+                                    MaterialTheme.colorScheme.surface.copy(alpha = 0.78f)
                                 },
-                                border = BorderStroke(
-                                    1.dp,
-                                    if (isWatched) MaterialTheme.colorScheme.primary.copy(alpha = 0.55f)
-                                    else MaterialTheme.colorScheme.outline
-                                )
+                                tonalElevation = 2.dp
                             ) {
                                 IconButton(
                                     onClick = onToggleWatch,
@@ -218,16 +215,17 @@ fun MatchDetailModal(
                             }
                         }
 
+                        // Central Stadium Scoreboard Card
                         Surface(
                             modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(18.dp),
-                            color = MaterialTheme.colorScheme.surface,
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+                            shape = RoundedCornerShape(24.dp),
+                            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
+                            tonalElevation = 2.dp
                         ) {
                             Column(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(horizontal = 14.dp, vertical = 18.dp),
+                                    .padding(horizontal = 16.dp, vertical = 20.dp),
                                 horizontalAlignment = Alignment.CenterHorizontally,
                                 verticalArrangement = Arrangement.spacedBy(14.dp)
                             ) {
@@ -236,61 +234,42 @@ fun MatchDetailModal(
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.SpaceBetween
                                 ) {
-                                    // Host club block (clickable -> Team Profile)
                                     Column(
-                                        modifier = Modifier
-                                            .weight(1f)
-                                            .clip(RoundedCornerShape(14.dp))
-                                            .clickable {
-                                                onTeamClick(match.host, state.leagueTitle, state.sport)
-                                            }
-                                            .padding(vertical = 4.dp, horizontal = 4.dp)
-                                            .testTag("detail_host_team"),
+                                        modifier = Modifier.weight(1f),
                                         horizontalAlignment = Alignment.CenterHorizontally,
-                                        verticalArrangement = Arrangement.spacedBy(7.dp)
+                                        verticalArrangement = Arrangement.spacedBy(8.dp)
                                     ) {
-                                        TeamLogo(
+                                        TeamBadge(
                                             logoUrl = match.host.logoUrl,
                                             teamName = match.host.name,
-                                            size = 58.dp,
-                                            highlightBorder = true
+                                            size = 60.dp
                                         )
                                         Text(
                                             text = match.host.name,
                                             style = MaterialTheme.typography.titleSmall,
-                                            fontWeight = FontWeight.ExtraBold,
+                                            fontWeight = FontWeight.Bold,
                                             textAlign = TextAlign.Center,
                                             maxLines = 2
                                         )
-                                        Text(
-                                            text = "پروفایل تیم ›",
-                                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-                                            color = MaterialTheme.colorScheme.primary
-                                        )
-                                        if (onToggleFavoriteTeam != null) {
-                                            FavoriteTeamButton(
-                                                isFavorite = match.host.name.lowercase() in favoriteTeamNames,
-                                                teamName = match.host.name,
-                                                onToggle = {
-                                                    onToggleFavoriteTeam(match.host, state.leagueTitle, state.sport)
-                                                },
-                                                modifier = Modifier.testTag("detail_host_favorite_button")
-                                            )
-                                        }
                                     }
 
-                                    // Central Broadcast Scoreboard
                                     Column(
                                         horizontalAlignment = Alignment.CenterHorizontally,
                                         verticalArrangement = Arrangement.spacedBy(8.dp)
                                     ) {
-                                        AnimatedScoreboard(
-                                            goals = match.goals,
-                                            isLive = match.isLive,
-                                            size = ScoreboardSize.HERO
-                                        )
                                         Surface(
-                                            shape = RoundedCornerShape(8.dp),
+                                            shape = RoundedCornerShape(16.dp),
+                                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)
+                                        ) {
+                                            RollingScoreText(
+                                                text = "${match.goals?.host?.let { SportsRepository.toPersianDigits(it) } ?: "–"} : ${match.goals?.guest?.let { SportsRepository.toPersianDigits(it) } ?: "–"}",
+                                                style = MaterialTheme.typography.headlineLarge,
+                                                fontWeight = FontWeight.ExtraBold,
+                                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                                            )
+                                        }
+                                        Surface(
+                                            shape = RoundedCornerShape(99.dp),
                                             color = if (match.isLive) MaterialTheme.colorScheme.tertiaryContainer
                                             else MaterialTheme.colorScheme.surfaceVariant
                                         ) {
@@ -300,12 +279,12 @@ fun MatchDetailModal(
                                                 horizontalArrangement = Arrangement.spacedBy(5.dp)
                                             ) {
                                                 if (match.isLive) {
-                                                    LivePulseIndicator(size = 6.dp)
+                                                    LivePulseDot(color = LiveCrimson, size = 6.dp)
                                                 }
                                                 Text(
                                                     text = match.stateLabel(),
                                                     style = MaterialTheme.typography.labelSmall,
-                                                    fontWeight = FontWeight.ExtraBold,
+                                                    fontWeight = FontWeight.Bold,
                                                     color = if (match.isLive) MaterialTheme.colorScheme.onTertiaryContainer
                                                     else MaterialTheme.colorScheme.onSurfaceVariant
                                                 )
@@ -313,47 +292,23 @@ fun MatchDetailModal(
                                         }
                                     }
 
-                                    // Guest club block (clickable -> Team Profile)
                                     Column(
-                                        modifier = Modifier
-                                            .weight(1f)
-                                            .clip(RoundedCornerShape(14.dp))
-                                            .clickable {
-                                                onTeamClick(match.guest, state.leagueTitle, state.sport)
-                                            }
-                                            .padding(vertical = 4.dp, horizontal = 4.dp)
-                                            .testTag("detail_guest_team"),
+                                        modifier = Modifier.weight(1f),
                                         horizontalAlignment = Alignment.CenterHorizontally,
-                                        verticalArrangement = Arrangement.spacedBy(7.dp)
+                                        verticalArrangement = Arrangement.spacedBy(8.dp)
                                     ) {
-                                        TeamLogo(
+                                        TeamBadge(
                                             logoUrl = match.guest.logoUrl,
                                             teamName = match.guest.name,
-                                            size = 58.dp,
-                                            highlightBorder = true
+                                            size = 60.dp
                                         )
                                         Text(
                                             text = match.guest.name,
                                             style = MaterialTheme.typography.titleSmall,
-                                            fontWeight = FontWeight.ExtraBold,
+                                            fontWeight = FontWeight.Bold,
                                             textAlign = TextAlign.Center,
                                             maxLines = 2
                                         )
-                                        Text(
-                                            text = "پروفایل تیم ›",
-                                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
-                                            color = MaterialTheme.colorScheme.secondary
-                                        )
-                                        if (onToggleFavoriteTeam != null) {
-                                            FavoriteTeamButton(
-                                                isFavorite = match.guest.name.lowercase() in favoriteTeamNames,
-                                                teamName = match.guest.name,
-                                                onToggle = {
-                                                    onToggleFavoriteTeam(match.guest, state.leagueTitle, state.sport)
-                                                },
-                                                modifier = Modifier.testTag("detail_guest_favorite_button")
-                                            )
-                                        }
                                     }
                                 }
 
@@ -374,15 +329,60 @@ fun MatchDetailModal(
                                     ) {
                                         metaChips.forEach { label ->
                                             Surface(
-                                                shape = RoundedCornerShape(8.dp),
-                                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.72f)
+                                                shape = RoundedCornerShape(99.dp),
+                                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.65f)
                                             ) {
                                                 Text(
                                                     text = label,
                                                     style = MaterialTheme.typography.labelSmall,
                                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                    modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp)
+                                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
                                                 )
+                                            }
+                                        }
+                                    }
+                                }
+
+                                val matchPageUrl = SportsRepository.safeVarzesh3MatchUrl(match.link)
+                                    .ifBlank { state.detailInfo?.pageUrl.orEmpty() }
+                                val watchUrl = match.liveStreamLink
+
+                                if (matchPageUrl.isNotBlank() || watchUrl.isNotBlank()) {
+                                    Row(
+                                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        if (watchUrl.isNotBlank()) {
+                                            Button(
+                                                onClick = {
+                                                    runCatching {
+                                                        context.startActivity(Intent(Intent.ACTION_VIEW, watchUrl.toUri()))
+                                                    }
+                                                },
+                                                shape = RoundedCornerShape(99.dp),
+                                                colors = ButtonDefaults.buttonColors(
+                                                    containerColor = MaterialTheme.colorScheme.primary,
+                                                    contentColor = MaterialTheme.colorScheme.onPrimary
+                                                )
+                                            ) {
+                                                Text("تماشای پخش", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                Icon(Icons.AutoMirrored.Rounded.OpenInNew, contentDescription = null, modifier = Modifier.size(15.dp))
+                                            }
+                                        }
+                                        if (matchPageUrl.isNotBlank()) {
+                                            OutlinedButton(
+                                                onClick = {
+                                                    runCatching {
+                                                        context.startActivity(Intent(Intent.ACTION_VIEW, matchPageUrl.toUri()))
+                                                    }
+                                                },
+                                                shape = RoundedCornerShape(99.dp),
+                                                border = BorderStroke(0.8.dp, MaterialTheme.colorScheme.outlineVariant)
+                                            ) {
+                                                Text("صفحهٔ کامل بازی", style = MaterialTheme.typography.labelMedium)
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                Icon(Icons.AutoMirrored.Rounded.OpenInNew, contentDescription = null, modifier = Modifier.size(15.dp))
                                             }
                                         }
                                     }
@@ -393,12 +393,11 @@ fun MatchDetailModal(
                 }
             }
 
-            // Segmented Tabs
+            // Pill-Segmented Tabs
             item(key = "detail_tabs") {
                 Surface(
-                    shape = RoundedCornerShape(14.dp),
-                    color = MaterialTheme.colorScheme.surface,
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                    shape = RoundedCornerShape(16.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.72f),
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 16.dp, vertical = 4.dp)
@@ -412,30 +411,31 @@ fun MatchDetailModal(
                         DetailTab.entries.forEach { tab ->
                             val selected = state.activeTab == tab
                             val pillColor by animateColorAsState(
-                                targetValue = if (selected) MaterialTheme.colorScheme.primary else Color.Transparent,
+                                targetValue = if (selected) MaterialTheme.colorScheme.surface else Color.Transparent,
                                 animationSpec = tween(220),
                                 label = "detailTabPill"
                             )
                             val labelColor by animateColorAsState(
-                                targetValue = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                targetValue = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                                 animationSpec = tween(220),
                                 label = "detailTabText"
                             )
                             Surface(
                                 modifier = Modifier
                                     .weight(1f)
-                                    .clip(RoundedCornerShape(10.dp))
+                                    .clip(RoundedCornerShape(12.dp))
                                     .bouncyClickable(pressedScale = 0.96f) {
                                         onSelectTab(tab)
                                     }
                                     .testTag("detail_tab_${tab.name.lowercase()}"),
-                                shape = RoundedCornerShape(10.dp),
-                                color = pillColor
+                                shape = RoundedCornerShape(12.dp),
+                                color = pillColor,
+                                shadowElevation = if (selected) 2.dp else 0.dp
                             ) {
                                 Text(
                                     text = tab.labelFa,
                                     style = MaterialTheme.typography.labelLarge,
-                                    fontWeight = if (selected) FontWeight.ExtraBold else FontWeight.Medium,
+                                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
                                     color = labelColor,
                                     textAlign = TextAlign.Center,
                                     maxLines = 1,
@@ -462,14 +462,10 @@ fun MatchDetailModal(
                         DetailTab.TIMELINE -> TimelineTabContent(
                             state = state,
                             onToggleHighlight = onToggleHighlight,
-                            onCloseHighlight = onCloseHighlight,
-                            onPlayerNameClick = onPlayerNameClick
+                            onCloseHighlight = onCloseHighlight
                         )
                         DetailTab.STATS -> StatsTabContent(state = state)
-                        DetailTab.LINEUP -> LineupTabContent(
-                            state = state,
-                            onPlayerClick = onPlayerClick
-                        )
+                        DetailTab.LINEUP -> LineupTabContent(state = state)
                     }
                 }
             }
@@ -481,336 +477,226 @@ fun MatchDetailModal(
 private fun TimelineTabContent(
     state: MatchDetailUiState,
     onToggleHighlight: (MatchEvent) -> Unit,
-    onCloseHighlight: () -> Unit,
-    onPlayerNameClick: (String, String, String) -> Unit
+    onCloseHighlight: () -> Unit
 ) {
-    MatchTimeline(
-        events = state.events,
-        match = state.match,
-        isLoading = state.isLoadingEvents,
-        emptyOrErrorMessage = state.eventsMessage,
-        activeHighlightEventId = state.activeHighlightEventId,
-        highlightMp4Url = state.highlightVideo?.mp4Url,
-        highlightTitle = state.highlightVideo?.title,
-        highlightStatus = state.highlightStatus,
-        onToggleHighlight = onToggleHighlight,
-        onCloseHighlight = onCloseHighlight,
-        onPlayerNameClick = onPlayerNameClick
-    )
-}
-
-@Composable
-fun MatchTimeline(
-    events: List<MatchEvent>,
-    match: MatchSummary?,
-    isLoading: Boolean = false,
-    emptyOrErrorMessage: String? = null,
-    activeHighlightEventId: String? = null,
-    highlightMp4Url: String? = null,
-    highlightTitle: String? = null,
-    highlightStatus: String = "",
-    onToggleHighlight: (MatchEvent) -> Unit = {},
-    onCloseHighlight: () -> Unit = {},
-    onPlayerNameClick: (String, String, String) -> Unit = { _, _, _ -> },
-    modifier: Modifier = Modifier
-) {
-    if (isLoading) {
+    if (state.isLoadingEvents) {
         Box(
-            modifier = modifier
+            modifier = Modifier
                 .fillMaxWidth()
                 .padding(32.dp),
             contentAlignment = Alignment.Center
         ) {
-            CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+            CircularProgressIndicator()
         }
         return
     }
-    if (events.isEmpty()) {
-        DetailEmptyMessage(emptyOrErrorMessage ?: "هنوز رخدادی برای این بازی ثبت نشده است.")
+    if (state.events.isEmpty()) {
+        DetailEmptyMessage(state.eventsMessage ?: "هنوز رخدادی برای این بازی ثبت نشده است.")
         return
     }
 
-    val groupedByPeriod = remember(events) {
-        linkedMapOf<String, MutableList<MatchEvent>>().apply {
-            events.forEach { ev ->
-                getOrPut(ev.periodLabel) { mutableListOf() }.add(ev)
-            }
-        }
+    val groupedByPeriod = linkedMapOf<String, MutableList<MatchEvent>>()
+    state.events.forEach { ev ->
+        groupedByPeriod.getOrPut(ev.periodLabel) { mutableListOf() }.add(ev)
     }
 
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .testTag("match_timeline"),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         groupedByPeriod.forEach { (period, periodEvents) ->
             Box(
                 modifier = Modifier.fillMaxWidth(),
                 contentAlignment = Alignment.Center
             ) {
                 Surface(
-                    shape = RoundedCornerShape(8.dp),
-                    color = MaterialTheme.colorScheme.primaryContainer,
-                    border = BorderStroke(0.7.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f))
+                    shape = RoundedCornerShape(99.dp),
+                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.85f)
                 ) {
                     Text(
                         text = period,
                         style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
                         modifier = Modifier.padding(horizontal = 14.dp, vertical = 5.dp)
                     )
                 }
             }
 
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                color = MaterialTheme.colorScheme.surface,
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
-            ) {
-                Column {
-                    periodEvents.forEachIndexed { idx, ev ->
-                        val isVideoOpen = activeHighlightEventId == ev.id
-                        val isAway = ev.side == 1
-                        val teamName = if (isAway) match?.guest?.name ?: "میهمان"
-                        else match?.host?.name ?: "میزبان"
-                        val teamLogo = if (isAway) match?.guest?.logoUrl.orEmpty()
-                        else match?.host?.logoUrl.orEmpty()
-
-                        TimelineEventRow(
-                            event = ev,
-                            teamSideLabel = teamName,
-                            isVideoOpen = isVideoOpen,
-                            mp4Url = if (isVideoOpen) highlightMp4Url else null,
-                            videoTitle = if (isVideoOpen) (highlightTitle ?: ev.titleLabel) else "",
-                            videoStatus = if (isVideoOpen) highlightStatus else "",
-                            onToggleHighlight = { onToggleHighlight(ev) },
-                            onCloseHighlight = onCloseHighlight,
-                            onPlayerClick = { playerName ->
-                                onPlayerNameClick(playerName, teamName, teamLogo)
-                            }
-                        )
-                        if (idx < periodEvents.lastIndex) {
-                            HorizontalDivider(
-                                thickness = 0.8.dp,
-                                color = MaterialTheme.colorScheme.outlineVariant,
-                                modifier = Modifier.padding(horizontal = 14.dp)
-                            )
-                        }
-                    }
-                }
+            periodEvents.forEach { ev ->
+                val isVideoOpen = state.activeHighlightEventId == ev.id
+                TimelineEventRow(
+                    event = ev,
+                    hostName = state.match?.host?.name ?: "میزبان",
+                    guestName = state.match?.guest?.name ?: "میهمان",
+                    isVideoOpen = isVideoOpen,
+                    mp4Url = if (isVideoOpen) state.highlightVideo?.mp4Url else null,
+                    videoTitle = if (isVideoOpen) state.highlightVideo?.title ?: ev.titleLabel else "",
+                    videoStatus = if (isVideoOpen) state.highlightStatus else "",
+                    onToggleHighlight = { onToggleHighlight(ev) },
+                    onCloseHighlight = onCloseHighlight
+                )
             }
         }
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun TimelineEventRow(
     event: MatchEvent,
-    teamSideLabel: String,
+    hostName: String,
+    guestName: String,
     isVideoOpen: Boolean,
     mp4Url: String?,
     videoTitle: String,
     videoStatus: String,
     onToggleHighlight: () -> Unit,
-    onCloseHighlight: () -> Unit,
-    onPlayerClick: (String) -> Unit
+    onCloseHighlight: () -> Unit
 ) {
-    val reducedMotion = rememberReducedMotionEnabled()
+    val isAway = event.side == 1
+    val teamSideLabel = if (isAway) guestName else hostName
     val badgeColor = when {
-        event.eventType == 1 -> ElectricLime
-        event.eventType == 4 -> BroadcastCyan
-        event.eventType == 5 -> Color(0xFFA78BFA)
+        event.eventType == 1 -> PitchLime
+        event.eventType == 4 -> MaterialTheme.colorScheme.primary
+        event.eventType == 5 -> Color(0xFF9F7AEA)
         event.description.contains("کارت قرمز") -> LiveCrimson
         event.description.contains("کارت زرد") -> AmberCard
         else -> MaterialTheme.colorScheme.onSurfaceVariant
     }
 
-    Column(
+    Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .then(
-                if (reducedMotion) Modifier
-                else Modifier.animateContentSize(
-                    animationSpec = spring(
-                        dampingRatio = Spring.DampingRatioLowBouncy,
-                        stiffness = Spring.StiffnessMediumLow
-                    )
+            .animateContentSize(
+                animationSpec = spring(
+                    dampingRatio = Spring.DampingRatioLowBouncy,
+                    stiffness = Spring.StiffnessMediumLow
                 )
-            )
-            .padding(14.dp)
+            ),
+        shape = RoundedCornerShape(18.dp),
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = 1.dp,
+        border = if (isVideoOpen) BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.65f)) else null
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.Top,
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Surface(
-                shape = RoundedCornerShape(9.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant,
-                border = BorderStroke(0.8.dp, MaterialTheme.colorScheme.outline)
+        Column(modifier = Modifier.padding(14.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.Top,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Text(
-                    text = "${SportsRepository.toPersianDigits(event.time)}′",
-                    style = MaterialTheme.typography.labelLarge.copy(fontFeatureSettings = "tnum"),
-                    fontWeight = FontWeight.Black,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(horizontal = 9.dp, vertical = 6.dp)
-                )
-            }
-
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(5.dp)
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.8f)
                 ) {
-                    if (event.eventType == 1) {
-                        GoalEventAnimation(size = 20.dp, iterations = 2)
-                    } else {
+                    Text(
+                        text = "${SportsRepository.toPersianDigits(event.time)}′",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        modifier = Modifier.padding(horizontal = 9.dp, vertical = 6.dp)
+                    )
+                }
+
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
                         Box(
                             modifier = Modifier
                                 .size(9.dp)
                                 .clip(CircleShape)
                                 .background(badgeColor)
                         )
-                    }
-                    Text(
-                        text = event.titleLabel,
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.ExtraBold
-                    )
-                }
-
-                Text(
-                    text = event.description.ifBlank { event.decisionTitle }.ifBlank { "جزئیات ثبت نشده است." },
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    Text(
-                        text = teamSideLabel,
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                    if (event.strikerName.isNotBlank()) {
-                        Surface(
-                            shape = RoundedCornerShape(6.dp),
-                            color = MaterialTheme.colorScheme.surfaceVariant,
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(6.dp))
-                                .clickable { onPlayerClick(event.strikerName) }
-                        ) {
-                            Text(
-                                text = "⚽ ${event.strikerName}",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurface,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                            )
-                        }
-                    }
-                    if (event.assisterName.isNotBlank()) {
-                        Surface(
-                            shape = RoundedCornerShape(6.dp),
-                            color = MaterialTheme.colorScheme.surfaceVariant,
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(6.dp))
-                                .clickable { onPlayerClick(event.assisterName) }
-                        ) {
-                            Text(
-                                text = "پاس گل: ${event.assisterName}",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.secondary,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                            )
-                        }
-                    }
-                    if (event.hostScore != null && event.guestScore != null) {
                         Text(
-                            text = "· ${SportsRepository.toPersianDigits(event.hostScore)} : ${SportsRepository.toPersianDigits(event.guestScore)}",
-                            style = MaterialTheme.typography.labelSmall.copy(fontFeatureSettings = "tnum"),
+                            text = event.titleLabel,
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
+                    Text(
+                        text = event.description.ifBlank { event.decisionTitle }.ifBlank { "جزئیات ثبت نشده است." },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = teamSideLabel,
+                            style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.primary
                         )
-                    }
-                }
-
-                if (event.videoId.isNotBlank()) {
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Surface(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(10.dp))
-                            .bouncyClickable(onClick = onToggleHighlight)
-                            .testTag("highlight_trigger_${event.videoId}"),
-                        shape = RoundedCornerShape(10.dp),
-                        color = if (isVideoOpen) MaterialTheme.colorScheme.primary
-                        else MaterialTheme.colorScheme.primaryContainer,
-                        border = BorderStroke(0.7.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.45f))
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            Icon(
-                                imageVector = if (isVideoOpen) Icons.Rounded.Videocam else Icons.Rounded.PlayArrow,
-                                contentDescription = null,
-                                tint = if (isVideoOpen) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(16.dp)
-                            )
+                        if (event.assisterName.isNotBlank()) {
                             Text(
-                                text = if (event.eventType == 1) "تماشای ویدئوی گل" else "تماشای صحنه",
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = if (isVideoOpen) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.primary
+                                text = "· پاس گل: ${event.assisterName}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
+                        }
+                        if (event.hostScore != null && event.guestScore != null) {
+                            Text(
+                                text = "· نتیجه: ${SportsRepository.toPersianDigits(event.hostScore)} : ${SportsRepository.toPersianDigits(event.guestScore)}",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+
+                    if (event.videoId.isNotBlank()) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Surface(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(99.dp))
+                                .bouncyClickable(onClick = onToggleHighlight)
+                                .testTag("highlight_trigger_${event.videoId}"),
+                            shape = RoundedCornerShape(99.dp),
+                            color = if (isVideoOpen) MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.primaryContainer
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Icon(
+                                    imageVector = if (isVideoOpen) Icons.Rounded.Videocam else Icons.Rounded.PlayArrow,
+                                    contentDescription = null,
+                                    tint = if (isVideoOpen) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onPrimaryContainer,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Text(
+                                    text = if (event.eventType == 1) "تماشای ویدئوی گل" else "تماشای صحنه",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isVideoOpen) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                            }
                         }
                     }
                 }
             }
-        }
 
-        if (isVideoOpen) {
-            Spacer(modifier = Modifier.height(10.dp))
-            InlineHighlightPlayer(
-                title = videoTitle,
-                mp4Url = mp4Url,
-                statusText = videoStatus,
-                onClose = onCloseHighlight
-            )
+            if (isVideoOpen) {
+                Spacer(modifier = Modifier.height(10.dp))
+                InlineHighlightPlayer(
+                    title = videoTitle,
+                    mp4Url = mp4Url,
+                    statusText = videoStatus,
+                    onClose = onCloseHighlight
+                )
+            }
         }
     }
 }
 
 @Composable
 private fun StatsTabContent(state: MatchDetailUiState) {
-    MatchStatisticsPanel(
-        stats = state.detailInfo?.stats.orEmpty(),
-        hostName = state.match?.host?.name ?: "میزبان",
-        guestName = state.match?.guest?.name ?: "میهمان",
-        statsTitle = state.detailInfo?.statsTitle ?: "آمار تفکیکی",
-        isLoading = state.isLoadingDetails,
-        errorMessage = if (!state.isLoadingDetails && state.detailInfo?.stats.isNullOrEmpty()) {
-            state.detailsMessage ?: "آمار این مسابقه در منبع فعلی موجود نیست."
-        } else null
-    )
-}
-
-@Composable
-private fun LineupTabContent(
-    state: MatchDetailUiState,
-    onPlayerClick: (LineupPlayer, String, String) -> Unit
-) {
     if (state.isLoadingDetails) {
         Box(
             modifier = Modifier
@@ -818,7 +704,133 @@ private fun LineupTabContent(
                 .padding(32.dp),
             contentAlignment = Alignment.Center
         ) {
-            CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+            CircularProgressIndicator()
+        }
+        return
+    }
+    val stats = state.detailInfo?.stats.orEmpty()
+    if (stats.isEmpty()) {
+        DetailEmptyMessage(state.detailsMessage ?: "آمار این مسابقه در منبع فعلی موجود نیست.")
+        return
+    }
+
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = state.match?.host?.name ?: "میزبان",
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary
+            )
+            Text(
+                text = state.detailInfo?.statsTitle ?: "مجموع بازی",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text(
+                text = state.match?.guest?.name ?: "میهمان",
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.secondary
+            )
+        }
+
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(22.dp),
+            color = MaterialTheme.colorScheme.surface,
+            tonalElevation = 1.dp
+        ) {
+            Column {
+                stats.forEachIndexed { idx, stat ->
+                    StatComparisonRow(stat = stat)
+                    if (idx < stats.lastIndex) {
+                        HorizontalDivider(
+                            modifier = Modifier.padding(horizontal = 14.dp),
+                            thickness = 0.5.dp,
+                            color = MaterialTheme.colorScheme.outlineVariant
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun StatComparisonRow(stat: StatEntry) {
+    val targetFraction = (stat.hostPercent / 100f).coerceIn(0.05f, 0.95f)
+    val animatedFraction by animateFloatAsState(
+        targetValue = targetFraction,
+        animationSpec = tween(durationMillis = 650),
+        label = "statFraction"
+    )
+
+    Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = SportsRepository.toPersianDigits(stat.hostValue),
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.ExtraBold,
+                color = MaterialTheme.colorScheme.primary
+            )
+            Text(
+                text = stat.title,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text(
+                text = SportsRepository.toPersianDigits(stat.guestValue),
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.ExtraBold,
+                color = MaterialTheme.colorScheme.secondary
+            )
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(8.dp)
+                .clip(RoundedCornerShape(99.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant),
+            horizontalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .weight(animatedFraction)
+                    .clip(RoundedCornerShape(99.dp))
+                    .background(MaterialTheme.colorScheme.primary)
+            )
+            Box(
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .weight((1f - animatedFraction).coerceAtLeast(0.01f))
+                    .clip(RoundedCornerShape(99.dp))
+                    .background(MaterialTheme.colorScheme.secondary.copy(alpha = 0.85f))
+            )
+        }
+    }
+}
+
+@Composable
+private fun LineupTabContent(state: MatchDetailUiState) {
+    if (state.isLoadingDetails) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(32.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            CircularProgressIndicator()
         }
         return
     }
@@ -833,9 +845,8 @@ private fun LineupTabContent(
 
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Surface(
-            shape = RoundedCornerShape(12.dp),
-            color = MaterialTheme.colorScheme.surface,
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+            shape = RoundedCornerShape(14.dp),
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.72f),
             modifier = Modifier.fillMaxWidth()
         ) {
             Row(modifier = Modifier.padding(4.dp)) {
@@ -847,16 +858,17 @@ private fun LineupTabContent(
                     Surface(
                         modifier = Modifier
                             .weight(1f)
-                            .clip(RoundedCornerShape(9.dp))
+                            .clip(RoundedCornerShape(10.dp))
                             .clickable { selectedSide = idx },
-                        shape = RoundedCornerShape(9.dp),
-                        color = if (active) MaterialTheme.colorScheme.primary else Color.Transparent
+                        shape = RoundedCornerShape(10.dp),
+                        color = if (active) MaterialTheme.colorScheme.surface else Color.Transparent,
+                        shadowElevation = if (active) 2.dp else 0.dp
                     ) {
                         Text(
                             text = teamName,
                             style = MaterialTheme.typography.labelLarge,
-                            fontWeight = if (active) FontWeight.ExtraBold else FontWeight.Medium,
-                            color = if (active) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontWeight = if (active) FontWeight.Bold else FontWeight.Medium,
+                            color = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                             textAlign = TextAlign.Center,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
@@ -870,66 +882,118 @@ private fun LineupTabContent(
         val activeSide = if (selectedSide == 0) hostLineup else guestLineup
         val activeTeamName = if (selectedSide == 0) state.match?.host?.name ?: "میزبان"
         else state.match?.guest?.name ?: "میهمان"
-        val activeTeamLogo = if (selectedSide == 0) state.match?.host?.logoUrl.orEmpty()
-        else state.match?.guest?.logoUrl.orEmpty()
 
         if (activeSide == null) {
             DetailEmptyMessage("ترکیب $activeTeamName در دسترس نیست.")
         } else {
-            if (activeSide.coach.isNotBlank()) {
-                Text(
-                    text = "سرمربی: ${activeSide.coach}",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 4.dp)
-                )
-            }
-
-            FootballPitchVisualization(
-                teamName = activeTeamName,
-                side = activeSide,
-                onPlayerClick = { player ->
-                    onPlayerClick(player, activeTeamName, activeTeamLogo)
-                }
-            )
-
-            LineupRosterBoard(
-                side = activeSide,
-                onPlayerClick = { player ->
-                    onPlayerClick(player, activeTeamName, activeTeamLogo)
-                }
-            )
+            LineupTeamCard(teamName = activeTeamName, side = activeSide)
         }
     }
 }
 
 @Composable
-private fun LineupRosterBoard(
-    side: LineupSide,
-    onPlayerClick: (LineupPlayer) -> Unit
+private fun LineupTeamCard(
+    teamName: String,
+    side: LineupSide
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(22.dp),
         color = MaterialTheme.colorScheme.surface,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+        tonalElevation = 1.dp
     ) {
         Column(
-            modifier = Modifier.padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
+            // Pitch formation banner
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(88.dp)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(
+                        Brush.linearGradient(
+                            listOf(Color(0xFF0E2C1E), Color(0xFF14422D))
+                        )
+                    )
+            ) {
+                Canvas(modifier = Modifier.fillMaxSize()) {
+                    val lineColor = Color.White.copy(alpha = 0.22f)
+                    val stroke = Stroke(width = 1.5.dp.toPx())
+                    drawRect(
+                        color = lineColor,
+                        topLeft = Offset(8.dp.toPx(), 8.dp.toPx()),
+                        size = Size(size.width - 16.dp.toPx(), size.height - 16.dp.toPx()),
+                        style = stroke
+                    )
+                    drawLine(
+                        color = lineColor,
+                        start = Offset(size.width / 2f, 8.dp.toPx()),
+                        end = Offset(size.width / 2f, size.height - 8.dp.toPx()),
+                        strokeWidth = 1.5.dp.toPx()
+                    )
+                    drawCircle(
+                        color = lineColor,
+                        radius = 22.dp.toPx(),
+                        center = Offset(size.width / 2f, size.height / 2f),
+                        style = stroke
+                    )
+                }
+                Row(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column {
+                        Text(
+                            text = teamName,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                        if (side.coach.isNotBlank()) {
+                            Text(
+                                text = "سرمربی: ${side.coach}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color.White.copy(alpha = 0.82f)
+                            )
+                        }
+                    }
+                    if (side.formation.isNotBlank()) {
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = PitchLime
+                        ) {
+                            Text(
+                                text = side.formation,
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = Color(0xFF0E1E0F),
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                            )
+                        }
+                    }
+                }
+            }
+
             if (side.starters.isNotEmpty()) {
                 Text(
-                    text = "بازیکنان اصلی (برای جزئیات روی بازیکن بزن)",
+                    text = "ترکیب اصلی",
                     style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.ExtraBold,
+                    fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.primary
                 )
                 side.starters.forEachIndexed { idx, p ->
                     PlayerLineupRow(
-                        player = p,
-                        showTopDivider = idx > 0,
-                        onClick = { onPlayerClick(p) }
+                        name = p.name,
+                        shirtNumber = p.shirtNumber,
+                        isCaptain = p.isCaptain,
+                        isMotm = p.isManOfTheMatch,
+                        score = p.score,
+                        showTopDivider = idx > 0
                     )
                 }
             }
@@ -937,16 +1001,19 @@ private fun LineupRosterBoard(
             if (side.bench.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(6.dp))
                 Text(
-                    text = "ذخیره‌ها",
+                    text = "نیمکت",
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 side.bench.forEachIndexed { idx, p ->
                     PlayerLineupRow(
-                        player = p,
-                        showTopDivider = idx > 0,
-                        onClick = { onPlayerClick(p) }
+                        name = p.name,
+                        shirtNumber = p.shirtNumber,
+                        isCaptain = p.isCaptain,
+                        isMotm = p.isManOfTheMatch,
+                        score = p.score,
+                        showTopDivider = idx > 0
                     )
                 }
             }
@@ -956,54 +1023,39 @@ private fun LineupRosterBoard(
 
 @Composable
 private fun PlayerLineupRow(
-    player: LineupPlayer,
-    showTopDivider: Boolean,
-    onClick: () -> Unit
+    name: String,
+    shirtNumber: String,
+    isCaptain: Boolean,
+    isMotm: Boolean,
+    score: String,
+    showTopDivider: Boolean
 ) {
     Column {
         if (showTopDivider) {
             HorizontalDivider(
-                thickness = 0.8.dp,
+                thickness = 0.5.dp,
                 color = MaterialTheme.colorScheme.outlineVariant
             )
         }
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(8.dp))
-                .clickable(onClick = onClick)
-                .padding(vertical = 10.dp, horizontal = 4.dp)
-                .testTag("lineup_player_${player.name}"),
+                .padding(vertical = 9.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
                 modifier = Modifier.weight(1f)
             ) {
-                if (player.shirtNumber.isNotBlank()) {
-                    Surface(
-                        shape = RoundedCornerShape(7.dp),
-                        color = MaterialTheme.colorScheme.surfaceVariant
-                    ) {
-                        Text(
-                            text = SportsRepository.toPersianDigits(player.shirtNumber),
-                            style = MaterialTheme.typography.labelSmall.copy(fontFeatureSettings = "tnum"),
-                            fontWeight = FontWeight.ExtraBold,
-                            color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
-                        )
-                    }
-                }
                 Text(
-                    text = player.name,
+                    text = name,
                     style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
-                if (player.isCaptain) {
+                if (isCaptain) {
                     Surface(
                         shape = RoundedCornerShape(6.dp),
                         color = MaterialTheme.colorScheme.primaryContainer
@@ -1016,7 +1068,7 @@ private fun PlayerLineupRow(
                         )
                     }
                 }
-                if (player.isManOfTheMatch) {
+                if (isMotm) {
                     Icon(
                         imageVector = Icons.Rounded.Star,
                         contentDescription = "بهترین بازیکن",
@@ -1027,29 +1079,30 @@ private fun PlayerLineupRow(
             }
 
             Row(
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                if (player.score.isNotBlank()) {
+                if (score.isNotBlank()) {
                     Surface(
                         shape = RoundedCornerShape(6.dp),
                         color = MaterialTheme.colorScheme.secondaryContainer
                     ) {
                         Text(
-                            text = SportsRepository.toPersianDigits(player.score),
-                            style = MaterialTheme.typography.labelSmall.copy(fontFeatureSettings = "tnum"),
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.secondary,
+                            text = SportsRepository.toPersianDigits(score),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer,
                             modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                         )
                     }
                 }
-                Icon(
-                    imageVector = Icons.Rounded.ChevronLeft,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(16.dp)
-                )
+                if (shirtNumber.isNotBlank()) {
+                    Text(
+                        text = "#${SportsRepository.toPersianDigits(shirtNumber)}",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
             }
         }
     }
@@ -1059,22 +1112,16 @@ private fun PlayerLineupRow(
 private fun DetailEmptyMessage(message: String) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(18.dp),
         color = MaterialTheme.colorScheme.surface,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+        tonalElevation = 1.dp
     ) {
-        Column(
-            modifier = Modifier.padding(24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            EmptyCrestLottie(size = 56.dp)
-            Text(
-                text = message,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center
-            )
-        }
+        Text(
+            text = message,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(24.dp)
+        )
     }
 }

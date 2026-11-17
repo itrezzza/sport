@@ -2,9 +2,7 @@ package com.example.ui.screens
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -20,7 +18,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -30,15 +27,16 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.NotificationsNone
-import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.ExpandMore
 import androidx.compose.material.icons.rounded.NotificationsActive
 import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.SportsSoccer
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -55,20 +53,22 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.example.R
 import com.example.data.model.LeagueGroup
 import com.example.data.model.MatchEntry
@@ -76,29 +76,15 @@ import com.example.data.model.MatchSummary
 import com.example.data.model.ScoreFilter
 import com.example.data.model.SportCategory
 import com.example.data.network.SportsRepository
-import com.example.ui.components.EmptyCrestLottie
 import com.example.ui.components.InstagramStoriesBar
-import com.example.ui.components.LeagueHeader
-import com.example.ui.components.LivePulseIndicator
+import com.example.ui.components.LivePulseDot
 import com.example.ui.components.LiveScoresPullRefreshIndicator
-import com.example.ui.components.MatchSkeletonLoader
-import com.example.ui.components.MatchSkeletonVariant
-import com.example.ui.components.PremiumLiveMatchCard
 import com.example.ui.components.RollingScoreText
-import com.example.ui.components.SportCategoryGlyph
 import com.example.ui.components.StaggeredEntrance
-import com.example.ui.components.TeamLogo
+import com.example.ui.components.TeamBadge
 import com.example.ui.components.bouncyClickable
-import com.example.ui.components.rememberReducedMotionEnabled
 import com.example.ui.theme.LiveCrimson
 import com.example.ui.viewmodel.ScoresUiState
-import kotlinx.coroutines.launch
-
-private enum class ScoreScheduleFilter(val labelFa: String) {
-    ALL("همه وضعیت‌ها"),
-    UPCOMING("پیش‌رو"),
-    FINISHED("پایان‌یافته")
-}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -118,30 +104,17 @@ fun ScoresScreen(
     modifier: Modifier = Modifier
 ) {
     var searchOpen by rememberSaveable { mutableStateOf(scoresState.searchQuery.isNotBlank()) }
-    var scheduleFilter by rememberSaveable { mutableStateOf(ScoreScheduleFilter.ALL) }
-    val reducedMotion = rememberReducedMotionEnabled()
     val query = scoresState.searchQuery.trim()
-    val listState = rememberLazyListState()
-    val scope = rememberCoroutineScope()
 
-    val liveTickerMatches = remember(scoresState.leagues, scoresState.sportCategory) {
-        scoresState.leagues
-            .filter { scoresState.sportCategory.sportId == null || it.sport == scoresState.sportCategory.sportId }
-            .flatMap { league ->
-                league.matches
-                    .filter { it.isLive }
-                    .map { m -> MatchEntry(match = m, leagueTitle = league.title, sport = league.sport) }
-            }
-            .take(10)
+    val liveTickerMatches = remember(scoresState.leagues) {
+        scoresState.leagues.flatMap { league ->
+            league.matches
+                .filter { it.isLive }
+                .map { m -> MatchEntry(match = m, leagueTitle = league.title, sport = league.sport) }
+        }.take(10)
     }
 
-    val filteredLeagues = remember(
-        scoresState.leagues,
-        scoresState.sportCategory,
-        scoresState.filter,
-        scheduleFilter,
-        query
-    ) {
+    val filteredLeagues = remember(scoresState.leagues, scoresState.sportCategory, scoresState.filter, query) {
         scoresState.leagues.mapNotNull { league ->
             val sportMatches = scoresState.sportCategory.sportId == null ||
                 league.sport == scoresState.sportCategory.sportId
@@ -149,20 +122,11 @@ fun ScoresScreen(
 
             val visibleMatches = league.matches.filter { m ->
                 val liveOk = scoresState.filter == ScoreFilter.ALL || m.isLive
-                val scheduleOk = if (scoresState.filter == ScoreFilter.LIVE) {
-                    true
-                } else {
-                    when (scheduleFilter) {
-                        ScoreScheduleFilter.ALL -> true
-                        ScoreScheduleFilter.UPCOMING -> !m.isLive && m.goals == null
-                        ScoreScheduleFilter.FINISHED -> !m.isLive && m.goals != null
-                    }
-                }
                 val queryOk = query.isBlank() ||
                     league.title.contains(query, ignoreCase = true) ||
                     m.host.name.contains(query, ignoreCase = true) ||
                     m.guest.name.contains(query, ignoreCase = true)
-                liveOk && scheduleOk && queryOk
+                liveOk && queryOk
             }
             if (visibleMatches.isEmpty()) null else league.copy(matches = visibleMatches)
         }
@@ -186,107 +150,285 @@ fun ScoresScreen(
             .testTag("scores_pull_to_refresh")
     ) {
         LazyColumn(
-            state = listState,
-            modifier = Modifier
-                .fillMaxSize()
-                .background(MaterialTheme.colorScheme.background),
-            contentPadding = PaddingValues(bottom = 18.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // 1. Sleek flush sports category underline strip (no boxy pills)
-            item(key = "scores_sport_tabs") {
-                ScoresSportCategoryBar(
-                    selectedCategory = scoresState.sportCategory,
-                    onSelectCategory = onSportChange
-                )
-            }
+        item(key = "instagram_stories_top_tray") {
+            InstagramStoriesBar(
+                storyGroups = scoresState.storyGroups,
+                seenStoryItemIds = scoresState.seenStoryItemIds,
+                needsLogin = scoresState.needsInstagramLogin,
+                connectedUsername = scoresState.instagramSession.username,
+                isLoading = scoresState.isLoadingStories,
+                errorMessage = scoresState.storiesError,
+                onOpenGroup = onOpenStoryGroup,
+                onRefresh = onRefreshStories,
+                onManageAccounts = onManageStoryAccounts,
+                onLoginClick = onLoginInstagram
+            )
+        }
 
-            // 2. Compact live/all + schedule + telemetry + search control strip
-            item(key = "scores_toolbar") {
-                ScoresControlStrip(
-                    scoresState = scoresState,
-                    scheduleFilter = scheduleFilter,
-                    searchOpen = searchOpen,
-                    hasStories = scoresState.storyGroups.isNotEmpty() || scoresState.needsInstagramLogin,
-                    onFilterChange = onFilterChange,
-                    onScheduleFilterChange = { scheduleFilter = it },
-                    onToggleSearch = {
-                        if (searchOpen) {
-                            onSearchChange("")
-                            searchOpen = false
-                        } else {
-                            searchOpen = true
+        if (liveTickerMatches.isNotEmpty() && query.isBlank()) {
+            item(key = "live_ticker_strip") {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        LivePulseDot(color = LiveCrimson, size = 6.dp)
+                        Text(
+                            text = "نتایج زنده اکنون",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.onBackground
+                        )
+                    }
+                    LazyRow(
+                        contentPadding = PaddingValues(horizontal = 16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        items(liveTickerMatches, key = { "ticker_${it.match.id}" }) { entry ->
+                            LiveTickerCard(
+                                entry = entry,
+                                onClick = { onMatchClick(entry.match, entry.leagueTitle, entry.sport) }
+                            )
                         }
-                    },
-                    onSearchChange = onSearchChange,
-                    onRefreshClick = onRefreshClick,
-                    onJumpToStories = {
-                        scope.launch {
-                            val items = listState.layoutInfo.totalItemsCount
-                            if (items > 1) {
-                                listState.animateScrollToItem((items - 2).coerceAtLeast(0))
+                    }
+                }
+            }
+        }
+
+        item(key = "scores_toolbar") {
+            Column(
+                modifier = Modifier.padding(horizontal = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Surface(
+                        shape = RoundedCornerShape(99.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.72f)
+                    ) {
+                        Row(modifier = Modifier.padding(3.dp)) {
+                            ScoreFilter.entries.forEach { filterOption ->
+                                val selected = scoresState.filter == filterOption
+                                val tabBg by animateColorAsState(
+                                    targetValue = if (selected) MaterialTheme.colorScheme.primary
+                                    else Color.Transparent,
+                                    animationSpec = tween(200),
+                                    label = "scoreFilterBg"
+                                )
+                                val tabTxt by animateColorAsState(
+                                    targetValue = if (selected) MaterialTheme.colorScheme.onPrimary
+                                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    animationSpec = tween(200),
+                                    label = "scoreFilterTxt"
+                                )
+                                Surface(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(99.dp))
+                                        .bouncyClickable(pressedScale = 0.94f) {
+                                            onFilterChange(filterOption)
+                                        }
+                                        .testTag("score_filter_${filterOption.name.lowercase()}"),
+                                    shape = RoundedCornerShape(99.dp),
+                                    color = tabBg
+                                ) {
+                                    Text(
+                                        text = filterOption.labelFa,
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                                        color = tabTxt,
+                                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 7.dp)
+                                    )
+                                }
                             }
                         }
                     }
-                )
-            }
 
-            // 3. Featured live matches horizontal broadcast spotlight
-            if (liveTickerMatches.isNotEmpty() && query.isBlank()) {
-                item(key = "live_ticker_strip") {
-                    FeaturedLiveMatchesSection(
-                        liveMatches = liveTickerMatches,
-                        watchedMatchIds = watchedMatchIds,
-                        onMatchClick = onMatchClick,
-                        onToggleWatchMatch = onToggleWatchMatch
-                    )
-                }
-            }
-
-            // 4. High-density edge-to-edge expandable league scoreboards
-            if (scoresState.isLoading && scoresState.leagues.isEmpty()) {
-                item(key = "scores_loading") {
-                    MatchSkeletonLoader(variant = MatchSkeletonVariant.LEAGUE_BOARD)
-                }
-            } else if (filteredLeagues.isEmpty()) {
-                item(key = "scores_empty") {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 12.dp)
-                            .background(
-                                color = MaterialTheme.colorScheme.surface,
-                                shape = RoundedCornerShape(14.dp)
-                            )
-                            .padding(24.dp),
-                        contentAlignment = Alignment.Center
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            EmptyCrestLottie(size = 64.dp)
-                            Text(
-                                text = if (scoresState.filter == ScoreFilter.LIVE) {
-                                    "در این لحظه بازی زنده‌ای فعال نیست. «همهٔ بازی‌ها» را بررسی کن."
+                        if (scoresState.lastUpdatedTime.isNotBlank()) {
+                            Surface(
+                                shape = RoundedCornerShape(99.dp),
+                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(99.dp))
+                                    .clickable(onClick = onRefreshClick)
+                                    .testTag("scores_live_polling_badge")
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(5.dp)
+                                ) {
+                                    LivePulseDot(
+                                        color = if (scoresState.liveCount > 0) LiveCrimson else MaterialTheme.colorScheme.primary,
+                                        size = 5.dp
+                                    )
+                                    Text(
+                                        text = "هر ${SportsRepository.toPersianDigits(scoresState.pollIntervalSeconds)} ثانیه · ${scoresState.lastUpdatedTime}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
+                        IconButton(
+                            onClick = {
+                                if (searchOpen) {
+                                    onSearchChange("")
+                                    searchOpen = false
                                 } else {
-                                    "مسابقه‌ای با این فیلتر پیدا نشد."
-                                },
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                textAlign = TextAlign.Center
+                                    searchOpen = true
+                                }
+                            },
+                            modifier = Modifier
+                                .minimumInteractiveComponentSize()
+                                .testTag("scores_toggle_search")
+                        ) {
+                            Icon(
+                                imageVector = if (searchOpen) Icons.Rounded.Close else Icons.Rounded.Search,
+                                contentDescription = if (searchOpen) "بستن جستجو" else "جستجو",
+                                tint = if (searchOpen) MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(20.dp)
                             )
                         }
                     }
                 }
-            } else {
-                items(
-                    count = filteredLeagues.size,
-                    key = { "${filteredLeagues[it].sport}_${filteredLeagues[it].title}" }
-                ) { idx ->
-                    val league = filteredLeagues[idx]
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    SportCategory.entries.forEach { category ->
+                        val selected = scoresState.sportCategory == category
+                        val bg by animateColorAsState(
+                            targetValue = if (selected) MaterialTheme.colorScheme.primaryContainer
+                            else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
+                            animationSpec = tween(180),
+                            label = "sportChipBg"
+                        )
+                        Surface(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(99.dp))
+                                .bouncyClickable(pressedScale = 0.94f) {
+                                    onSportChange(category)
+                                }
+                                .testTag("sport_chip_${category.name.lowercase()}"),
+                            shape = RoundedCornerShape(99.dp),
+                            color = bg
+                        ) {
+                            Text(
+                                text = category.labelFa,
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                                color = if (selected) MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(horizontal = 13.dp, vertical = 7.dp)
+                            )
+                        }
+                    }
+                }
+
+                AnimatedVisibility(
+                    visible = searchOpen || scoresState.searchQuery.isNotEmpty(),
+                    enter = expandVertically(tween(220)) + fadeIn(tween(200)),
+                    exit = shrinkVertically(tween(180)) + fadeOut(tween(140))
+                ) {
+                    OutlinedTextField(
+                        value = scoresState.searchQuery,
+                        onValueChange = onSearchChange,
+                        singleLine = true,
+                        placeholder = { Text("جستجوی تیم یا لیگ…", style = MaterialTheme.typography.bodySmall) },
+                        leadingIcon = {
+                            Icon(Icons.Rounded.Search, contentDescription = null, modifier = Modifier.size(18.dp))
+                        },
+                        trailingIcon = if (scoresState.searchQuery.isNotEmpty()) {
+                            {
+                                IconButton(onClick = { onSearchChange("") }) {
+                                    Icon(Icons.Rounded.Close, contentDescription = "پاک کردن", modifier = Modifier.size(16.dp))
+                                }
+                            }
+                        } else null,
+                        shape = RoundedCornerShape(16.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = MaterialTheme.colorScheme.primary,
+                            unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant
+                        ),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("scores_search_input")
+                    )
+                }
+            }
+        }
+
+        if (scoresState.isLoading && scoresState.leagues.isEmpty()) {
+            item(key = "scores_loading") {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 48.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator()
+                }
+            }
+        } else if (filteredLeagues.isEmpty()) {
+            item(key = "scores_empty") {
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp),
+                    shape = RoundedCornerShape(20.dp),
+                    color = MaterialTheme.colorScheme.surface,
+                    tonalElevation = 1.dp
+                ) {
+                    Column(
+                        modifier = Modifier.padding(28.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.SportsSoccer,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(32.dp)
+                        )
+                        Text(
+                            text = if (scoresState.filter == ScoreFilter.LIVE) {
+                                "الان بازی زنده‌ای ثبت نشده. «همهٔ بازی‌ها» را ببین."
+                            } else {
+                                "مسابقه‌ای با این فیلتر پیدا نشد."
+                            },
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
+            }
+        } else {
+            items(
+                count = filteredLeagues.size,
+                key = { "${filteredLeagues[it].sport}_${filteredLeagues[it].title}" }
+            ) { idx ->
+                val league = filteredLeagues[idx]
+                Box(modifier = Modifier.padding(horizontal = 16.dp)) {
                     StaggeredEntrance(index = idx) {
-                        EdgeToEdgeLeagueScoreboard(
+                        LeagueMatchBoardCard(
                             league = league,
                             watchedMatchIds = watchedMatchIds,
                             onMatchClick = { match ->
@@ -299,413 +441,122 @@ fun ScoresScreen(
                     }
                 }
             }
-
-            // 5. Instagram stories bar preserved cleanly beneath the scoreboard feed
-            item(key = "instagram_stories_top_tray") {
-                Column(modifier = Modifier.padding(top = 6.dp)) {
-                    HorizontalDivider(
-                        thickness = 0.6.dp,
-                        color = MaterialTheme.colorScheme.outlineVariant,
-                        modifier = Modifier.padding(bottom = 12.dp)
-                    )
-                    InstagramStoriesBar(
-                        storyGroups = scoresState.storyGroups,
-                        seenStoryItemIds = scoresState.seenStoryItemIds,
-                        needsLogin = scoresState.needsInstagramLogin,
-                        connectedUsername = scoresState.instagramSession.username,
-                        isLoading = scoresState.isLoadingStories,
-                        errorMessage = scoresState.storiesError,
-                        onOpenGroup = onOpenStoryGroup,
-                        onRefresh = onRefreshStories,
-                        onManageAccounts = onManageStoryAccounts,
-                        onLoginClick = onLoginInstagram
-                    )
-                }
-            }
+        }
 
             item(key = "scores_bottom_pad") {
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(14.dp))
             }
         }
     }
 }
 
 @Composable
-private fun ScoresSportCategoryBar(
-    selectedCategory: SportCategory,
-    onSelectCategory: (SportCategory) -> Unit
+private fun LiveTickerCard(
+    entry: MatchEntry,
+    onClick: () -> Unit
 ) {
-    val reducedMotion = rememberReducedMotionEnabled()
-
-    Column(
+    val match = entry.match
+    Surface(
         modifier = Modifier
-            .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.72f))
+            .width(198.dp)
+            .clip(RoundedCornerShape(18.dp))
+            .bouncyClickable(onClick = onClick),
+        shape = RoundedCornerShape(18.dp),
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = 2.dp,
+        border = BorderStroke(0.8.dp, LiveCrimson.copy(alpha = 0.35f))
     ) {
-        Row(
+        Column(
             modifier = Modifier
-                .fillMaxWidth()
-                .horizontalScroll(rememberScrollState())
-                .padding(horizontal = 10.dp),
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            SportCategory.entries.forEach { category ->
-                val selected = selectedCategory == category
-                val tintColor by animateColorAsState(
-                    targetValue = if (selected) MaterialTheme.colorScheme.primary
-                    else MaterialTheme.colorScheme.onSurfaceVariant,
-                    animationSpec = tween(if (reducedMotion) 0 else 180),
-                    label = "sportTabColor"
+                .background(
+                    Brush.verticalGradient(
+                        listOf(
+                            LiveCrimson.copy(alpha = 0.08f),
+                            Color.Transparent
+                        )
+                    )
                 )
-                val barWidth by animateDpAsState(
-                    targetValue = if (selected) 26.dp else 0.dp,
-                    animationSpec = if (reducedMotion) tween(0) else spring(
-                        dampingRatio = Spring.DampingRatioMediumBouncy,
-                        stiffness = Spring.StiffnessMedium
-                    ),
-                    label = "sportUnderline"
-                )
-
-                Box(
-                    modifier = Modifier
-                        .height(42.dp)
-                        .clip(RoundedCornerShape(6.dp))
-                        .bouncyClickable(pressedScale = 0.95f) {
-                            onSelectCategory(category)
-                        }
-                        .padding(horizontal = 10.dp)
-                        .testTag("sport_chip_${category.name.lowercase()}"),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        SportCategoryGlyph(
-                            sportId = category.sportId,
-                            tint = tintColor,
-                            size = 13.dp
-                        )
-                        Text(
-                            text = category.labelFa,
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = if (selected) FontWeight.ExtraBold else FontWeight.Medium,
-                            color = tintColor,
-                            maxLines = 1
-                        )
-                    }
-
-                    if (barWidth > 0.dp) {
-                        Box(
-                            modifier = Modifier
-                                .align(Alignment.BottomCenter)
-                                .width(barWidth)
-                                .height(2.5.dp)
-                                .clip(RoundedCornerShape(topStart = 2.dp, topEnd = 2.dp))
-                                .background(MaterialTheme.colorScheme.primary)
-                        )
-                    }
-                }
-            }
-        }
-        HorizontalDivider(
-            thickness = 0.6.dp,
-            color = MaterialTheme.colorScheme.outline.copy(alpha = 0.65f)
-        )
-    }
-}
-
-@Composable
-private fun ScoresControlStrip(
-    scoresState: ScoresUiState,
-    scheduleFilter: ScoreScheduleFilter,
-    searchOpen: Boolean,
-    hasStories: Boolean,
-    onFilterChange: (ScoreFilter) -> Unit,
-    onScheduleFilterChange: (ScoreScheduleFilter) -> Unit,
-    onToggleSearch: () -> Unit,
-    onSearchChange: (String) -> Unit,
-    onRefreshClick: () -> Unit,
-    onJumpToStories: () -> Unit
-) {
-    val reducedMotion = rememberReducedMotionEnabled()
-
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 14.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+                .padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            // Segmented Live vs All switch
             Row(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(9.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.72f))
-                    .padding(2.dp),
-                horizontalArrangement = Arrangement.spacedBy(2.dp),
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                ScoreFilter.entries.forEach { filterOption ->
-                    val selected = scoresState.filter == filterOption
-                    val pillBg by animateColorAsState(
-                        targetValue = if (selected) MaterialTheme.colorScheme.primary
-                        else Color.Transparent,
-                        animationSpec = tween(if (reducedMotion) 0 else 180),
-                        label = "scoreFilterPill"
-                    )
-                    val textColor by animateColorAsState(
-                        targetValue = if (selected) MaterialTheme.colorScheme.onPrimary
-                        else MaterialTheme.colorScheme.onSurfaceVariant,
-                        animationSpec = tween(if (reducedMotion) 0 else 180),
-                        label = "scoreFilterTxt"
-                    )
-                    Row(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(7.dp))
-                            .background(pillBg)
-                            .bouncyClickable(pressedScale = 0.95f) {
-                                onFilterChange(filterOption)
-                            }
-                            .padding(horizontal = 11.dp, vertical = 6.dp)
-                            .testTag("score_filter_${filterOption.name.lowercase()}"),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(5.dp)
-                    ) {
-                        if (filterOption == ScoreFilter.LIVE) {
-                            LivePulseIndicator(
-                                color = if (selected) LiveCrimson else LiveCrimson.copy(alpha = 0.85f),
-                                size = 5.dp
-                            )
-                        }
-                        Text(
-                            text = filterOption.labelFa,
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = if (selected) FontWeight.ExtraBold else FontWeight.Medium,
-                            color = textColor,
-                            maxLines = 1
-                        )
-                    }
-                }
-            }
-
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                if (hasStories) {
-                    Surface(
-                        shape = RoundedCornerShape(8.dp),
-                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(8.dp))
-                            .clickable(onClick = onJumpToStories)
-                            .testTag("scores_stories_shortcut")
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Rounded.AutoAwesome,
-                                contentDescription = "استوری‌ها",
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(13.dp)
-                            )
-                            Text(
-                                text = "استوری",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                        }
-                    }
-                }
-
-                if (scoresState.lastUpdatedTime.isNotBlank()) {
-                    Row(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.48f))
-                            .clickable(onClick = onRefreshClick)
-                            .padding(horizontal = 8.dp, vertical = 5.dp)
-                            .testTag("scores_live_polling_badge"),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        if (scoresState.liveCount > 0) {
-                            LivePulseIndicator(size = 5.dp)
-                        }
-                        Text(
-                            text = "${SportsRepository.toPersianDigits(scoresState.pollIntervalSeconds)}″",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                        Text(
-                            text = "•",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Text(
-                            text = scoresState.lastUpdatedTime,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-
-                IconButton(
-                    onClick = onToggleSearch,
-                    modifier = Modifier
-                        .minimumInteractiveComponentSize()
-                        .testTag("scores_toggle_search")
-                ) {
-                    Icon(
-                        imageVector = if (searchOpen) Icons.Rounded.Close else Icons.Rounded.Search,
-                        contentDescription = if (searchOpen) "بستن جستجو" else "جستجو",
-                        tint = if (searchOpen) MaterialTheme.colorScheme.primary
-                        else MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(19.dp)
-                    )
-                }
-            }
-        }
-
-        // Sleek text-tab strip for All/Upcoming/Finished subfilters (no heavy boxy chips)
-        if (scoresState.filter == ScoreFilter.ALL) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 2.dp),
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                ScoreScheduleFilter.entries.forEach { option ->
-                    val selected = scheduleFilter == option
-                    val color by animateColorAsState(
-                        targetValue = if (selected) MaterialTheme.colorScheme.primary
-                        else MaterialTheme.colorScheme.onSurfaceVariant,
-                        animationSpec = tween(if (reducedMotion) 0 else 160),
-                        label = "scheduleSubColor"
-                    )
-                    Column(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(6.dp))
-                            .clickable { onScheduleFilterChange(option) }
-                            .padding(vertical = 3.dp, horizontal = 2.dp)
-                            .testTag("score_schedule_${option.name.lowercase()}"),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(3.dp)
-                    ) {
-                        Text(
-                            text = option.labelFa,
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = if (selected) FontWeight.ExtraBold else FontWeight.Medium,
-                            color = color,
-                            maxLines = 1
-                        )
-                        Box(
-                            modifier = Modifier
-                                .width(if (selected) 24.dp else 0.dp)
-                                .height(2.dp)
-                                .clip(RoundedCornerShape(99.dp))
-                                .background(MaterialTheme.colorScheme.primary)
-                        )
-                    }
-                }
-            }
-        }
-
-        AnimatedVisibility(
-            visible = searchOpen || scoresState.searchQuery.isNotEmpty(),
-            enter = expandVertically(tween(if (reducedMotion) 0 else 200)) + fadeIn(tween(if (reducedMotion) 0 else 180)),
-            exit = shrinkVertically(tween(if (reducedMotion) 0 else 160)) + fadeOut(tween(if (reducedMotion) 0 else 130))
-        ) {
-            OutlinedTextField(
-                value = scoresState.searchQuery,
-                onValueChange = onSearchChange,
-                singleLine = true,
-                placeholder = { Text("جستجوی تیم یا لیگ…", style = MaterialTheme.typography.bodySmall) },
-                leadingIcon = {
-                    Icon(Icons.Rounded.Search, contentDescription = null, modifier = Modifier.size(18.dp))
-                },
-                trailingIcon = if (scoresState.searchQuery.isNotEmpty()) {
-                    {
-                        IconButton(onClick = { onSearchChange("") }) {
-                            Icon(Icons.Rounded.Close, contentDescription = "پاک کردن", modifier = Modifier.size(16.dp))
-                        }
-                    }
-                } else null,
-                shape = RoundedCornerShape(12.dp),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = MaterialTheme.colorScheme.primary,
-                    unfocusedBorderColor = MaterialTheme.colorScheme.outline,
-                    focusedContainerColor = MaterialTheme.colorScheme.surface,
-                    unfocusedContainerColor = MaterialTheme.colorScheme.surface
-                ),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .testTag("scores_search_input")
-            )
-        }
-    }
-}
-
-@Composable
-private fun FeaturedLiveMatchesSection(
-    liveMatches: List<MatchEntry>,
-    watchedMatchIds: Set<String>,
-    onMatchClick: (MatchSummary, String, Int) -> Unit,
-    onToggleWatchMatch: (MatchSummary, String) -> Unit
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 14.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                LivePulseIndicator(size = 6.5.dp)
                 Text(
-                    text = "پخش ویژهٔ زنده",
+                    text = entry.leagueTitle,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
+                )
+                Surface(
+                    shape = RoundedCornerShape(6.dp),
+                    color = LiveCrimson
+                ) {
+                    Text(
+                        text = match.liveTime.ifBlank { "زنده" },
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White,
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp)
+                    )
+                }
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    modifier = Modifier.weight(1f),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    TeamBadge(logoUrl = match.host.logoUrl, teamName = match.host.name, size = 20.dp)
+                    Text(
+                        text = match.host.name,
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                RollingScoreText(
+                    text = match.goals?.host?.let { SportsRepository.toPersianDigits(it) } ?: "۰",
                     style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Black,
-                    color = MaterialTheme.colorScheme.onBackground
+                    fontWeight = FontWeight.ExtraBold,
+                    color = MaterialTheme.colorScheme.onSurface
                 )
             }
-            Text(
-                text = "${SportsRepository.toPersianDigits(liveMatches.size)} مسابقه",
-                style = MaterialTheme.typography.labelSmall,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary
-            )
-        }
 
-        LazyRow(
-            contentPadding = PaddingValues(horizontal = 14.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            items(liveMatches, key = { "ticker_${it.match.id}" }) { entry ->
-                PremiumLiveMatchCard(
-                    entry = entry,
-                    isWatched = entry.match.id in watchedMatchIds,
-                    onToggleWatch = if (entry.match.id.isNotBlank()) {
-                        { onToggleWatchMatch(entry.match, entry.leagueTitle) }
-                    } else null,
-                    onClick = { onMatchClick(entry.match, entry.leagueTitle, entry.sport) },
-                    modifier = Modifier.width(248.dp)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    modifier = Modifier.weight(1f),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    TeamBadge(logoUrl = match.guest.logoUrl, teamName = match.guest.name, size = 20.dp)
+                    Text(
+                        text = match.guest.name,
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                RollingScoreText(
+                    text = match.goals?.guest?.let { SportsRepository.toPersianDigits(it) } ?: "۰",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = MaterialTheme.colorScheme.onSurface
                 )
             }
         }
@@ -713,245 +564,202 @@ private fun FeaturedLiveMatchesSection(
 }
 
 @Composable
-private fun EdgeToEdgeLeagueScoreboard(
+private fun LeagueMatchBoardCard(
     league: LeagueGroup,
     watchedMatchIds: Set<String>,
     onMatchClick: (MatchSummary) -> Unit,
     onToggleWatchMatch: (MatchSummary) -> Unit
 ) {
     var expanded by rememberSaveable(league.title) { mutableStateOf(true) }
-    val reducedMotion = rememberReducedMotionEnabled()
-    val hasLiveInLeague = league.matches.any { it.isLive }
+    val haptic = LocalHapticFeedback.current
+    val chevronAngle by animateFloatAsState(
+        targetValue = if (expanded) 0f else 180f,
+        animationSpec = tween(220),
+        label = "leagueChevron"
+    )
 
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surface)
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = 1.dp
     ) {
-        HorizontalDivider(
-            thickness = 0.6.dp,
-            color = MaterialTheme.colorScheme.outline.copy(alpha = 0.55f)
-        )
-        LeagueHeader(
-            title = league.title,
-            matchCount = league.matches.size,
-            hasLive = hasLiveInLeague,
-            expanded = expanded,
-            onToggleExpand = { expanded = !expanded }
-        )
-
-        AnimatedVisibility(
-            visible = expanded,
-            enter = expandVertically(tween(if (reducedMotion) 0 else 200)) + fadeIn(tween(if (reducedMotion) 0 else 180)),
-            exit = shrinkVertically(tween(if (reducedMotion) 0 else 160)) + fadeOut(tween(if (reducedMotion) 0 else 130))
-        ) {
-            Column {
-                league.matches.forEach { match ->
-                    HorizontalDivider(
-                        thickness = 0.5.dp,
-                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.75f),
-                        modifier = Modifier.padding(start = 14.dp)
+        Column {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable {
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        expanded = !expanded
+                    }
+                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    modifier = Modifier.weight(1f),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    val hasLiveInLeague = league.matches.any { it.isLive }
+                    Box(
+                        modifier = Modifier
+                            .width(4.dp)
+                            .height(16.dp)
+                            .clip(RoundedCornerShape(99.dp))
+                            .background(
+                                if (hasLiveInLeague) LiveCrimson
+                                else MaterialTheme.colorScheme.primary
+                            )
                     )
-                    CompactTelemetryMatchRow(
-                        match = match,
-                        isWatched = match.id in watchedMatchIds,
-                        onClick = { onMatchClick(match) },
-                        onToggleWatch = { onToggleWatchMatch(match) }
+                    Text(
+                        text = league.title,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                Spacer(modifier = Modifier.width(8.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Surface(
+                        shape = RoundedCornerShape(99.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)
+                    ) {
+                        Text(
+                            text = SportsRepository.toPersianDigits(league.matches.size),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                        )
+                    }
+                    Icon(
+                        imageVector = Icons.Rounded.ExpandMore,
+                        contentDescription = if (expanded) "بستن لیگ" else "باز کردن لیگ",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier
+                            .size(18.dp)
+                            .graphicsLayer { rotationZ = chevronAngle }
                     )
                 }
             }
+
+            AnimatedVisibility(
+                visible = expanded,
+                enter = expandVertically(tween(220)) + fadeIn(tween(200)),
+                exit = shrinkVertically(tween(180)) + fadeOut(tween(140))
+            ) {
+                Column {
+                    league.matches.forEach { match ->
+                        HorizontalDivider(
+                            thickness = 0.5.dp,
+                            color = MaterialTheme.colorScheme.outlineVariant,
+                            modifier = Modifier.padding(horizontal = 14.dp)
+                        )
+                        ScoreMatchRow(
+                            match = match,
+                            isWatched = match.id in watchedMatchIds,
+                            onClick = { onMatchClick(match) },
+                            onToggleWatch = { onToggleWatchMatch(match) }
+                        )
+                    }
+                }
+            }
         }
-        HorizontalDivider(
-            thickness = 0.6.dp,
-            color = MaterialTheme.colorScheme.outline.copy(alpha = 0.55f)
-        )
     }
 }
 
 @Composable
-private fun CompactTelemetryMatchRow(
+private fun ScoreMatchRow(
     match: MatchSummary,
     isWatched: Boolean,
     onClick: () -> Unit,
     onToggleWatch: () -> Unit
 ) {
-    val hostGoals = match.goals?.host
-    val guestGoals = match.goals?.guest
-    val hostWins = !match.isLive && hostGoals != null && guestGoals != null && hostGoals > guestGoals
-    val guestWins = !match.isLive && hostGoals != null && guestGoals != null && guestGoals > hostGoals
-
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(60.dp)
             .clickable(onClick = onClick)
+            .padding(start = 12.dp, end = 4.dp, top = 8.dp, bottom = 8.dp)
             .testTag("score_card_${match.id}"),
-        verticalAlignment = Alignment.CenterVertically
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-        // Edge indicator rail: Live Crimson when live, Electric Lime when watched
-        Box(
-            modifier = Modifier
-                .width(3.dp)
-                .fillMaxHeight()
-                .padding(vertical = 8.dp)
-                .clip(RoundedCornerShape(topEnd = 3.dp, bottomEnd = 3.dp))
-                .background(
-                    when {
-                        match.isLive -> LiveCrimson
-                        isWatched -> MaterialTheme.colorScheme.primary
-                        else -> Color.Transparent
-                    }
-                )
-        )
-
-        // Status / Minute telemetry column
-        Column(
-            modifier = Modifier
-                .width(50.dp)
-                .padding(horizontal = 4.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
+        Row(
+            modifier = Modifier.width(46.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             if (match.isLive) {
-                LivePulseIndicator(size = 5.dp)
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = match.liveTime.ifBlank { "زنده" },
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = LiveCrimson,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    textAlign = TextAlign.Center
-                )
-            } else if (match.goals != null) {
-                Text(
-                    text = "پایان",
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    textAlign = TextAlign.Center
-                )
-            } else {
-                Text(
-                    text = match.time.ifBlank { "–" },
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    textAlign = TextAlign.Center
-                )
+                LivePulseDot(color = LiveCrimson, size = 5.dp)
             }
-        }
-
-        // Dual stacked team rows: plenty of width even on 360dp screens
-        Column(
-            modifier = Modifier
-                .weight(1f)
-                .padding(horizontal = 6.dp),
-            verticalArrangement = Arrangement.spacedBy(5.dp)
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                TeamLogo(
-                    logoUrl = match.host.logoUrl,
-                    teamName = match.host.name,
-                    size = 20.dp,
-                    highlightBorder = hostWins
-                )
-                Text(
-                    text = match.host.name,
-                    style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.5.sp),
-                    fontWeight = when {
-                        hostWins || match.isLive -> FontWeight.Bold
-                        guestWins -> FontWeight.Normal
-                        else -> FontWeight.SemiBold
-                    },
-                    color = if (guestWins) {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    } else {
-                        MaterialTheme.colorScheme.onSurface
-                    },
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                TeamLogo(
-                    logoUrl = match.guest.logoUrl,
-                    teamName = match.guest.name,
-                    size = 20.dp,
-                    highlightBorder = guestWins
-                )
-                Text(
-                    text = match.guest.name,
-                    style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.5.sp),
-                    fontWeight = when {
-                        guestWins || match.isLive -> FontWeight.Bold
-                        hostWins -> FontWeight.Normal
-                        else -> FontWeight.SemiBold
-                    },
-                    color = if (hostWins) {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    } else {
-                        MaterialTheme.colorScheme.onSurface
-                    },
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-        }
-
-        // Stacked vertical large tabular scores
-        Column(
-            modifier = Modifier.width(34.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(3.dp)
-        ) {
-            val hostScoreDisplay = hostGoals?.let { SportsRepository.toPersianDigits(it) } ?: "–"
-            val guestScoreDisplay = guestGoals?.let { SportsRepository.toPersianDigits(it) } ?: "–"
-
-            RollingScoreText(
-                text = hostScoreDisplay,
-                style = MaterialTheme.typography.titleMedium.copy(
-                    fontSize = 17.sp,
-                    lineHeight = 20.sp,
-                    fontFeatureSettings = "tnum"
-                ),
-                fontWeight = if (hostWins || match.isLive) FontWeight.Black else FontWeight.Bold,
-                color = when {
-                    match.isLive -> MaterialTheme.colorScheme.primary
-                    hostGoals == null -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
-                    guestWins -> MaterialTheme.colorScheme.onSurfaceVariant
-                    else -> MaterialTheme.colorScheme.onSurface
-                }
-            )
-            RollingScoreText(
-                text = guestScoreDisplay,
-                style = MaterialTheme.typography.titleMedium.copy(
-                    fontSize = 17.sp,
-                    lineHeight = 20.sp,
-                    fontFeatureSettings = "tnum"
-                ),
-                fontWeight = if (guestWins || match.isLive) FontWeight.Black else FontWeight.Bold,
-                color = when {
-                    match.isLive -> MaterialTheme.colorScheme.primary
-                    guestGoals == null -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.55f)
-                    hostWins -> MaterialTheme.colorScheme.onSurfaceVariant
-                    else -> MaterialTheme.colorScheme.onSurface
-                }
+            Text(
+                text = when {
+                    match.isLive -> match.liveTime.ifBlank { "زنده" }
+                    match.goals != null -> "پایان"
+                    else -> match.time.ifBlank { "–" }
+                },
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = if (match.isLive) FontWeight.Bold else FontWeight.Normal,
+                color = if (match.isLive) LiveCrimson else MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
         }
 
-        // Accessible 48dp touch-target notification bell
+        Row(
+            modifier = Modifier.weight(1f),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.End
+        ) {
+            Text(
+                text = match.host.name,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Medium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.End,
+                modifier = Modifier.weight(1f, fill = false)
+            )
+            Spacer(modifier = Modifier.width(6.dp))
+            TeamBadge(logoUrl = match.host.logoUrl, teamName = match.host.name, size = 24.dp)
+        }
+
+        Surface(
+            shape = RoundedCornerShape(9.dp),
+            color = if (match.isLive) MaterialTheme.colorScheme.tertiaryContainer
+            else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.72f)
+        ) {
+            RollingScoreText(
+                text = "${match.goals?.host?.let { SportsRepository.toPersianDigits(it) } ?: "–"} : ${match.goals?.guest?.let { SportsRepository.toPersianDigits(it) } ?: "–"}",
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.ExtraBold,
+                color = if (match.isLive) MaterialTheme.colorScheme.onTertiaryContainer
+                else MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp)
+            )
+        }
+
+        Row(
+            modifier = Modifier.weight(1f),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Start
+        ) {
+            TeamBadge(logoUrl = match.guest.logoUrl, teamName = match.guest.name, size = 24.dp)
+            Spacer(modifier = Modifier.width(6.dp))
+            Text(
+                text = match.guest.name,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Medium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+
         if (match.id.isNotBlank()) {
             IconButton(
                 onClick = onToggleWatch,
@@ -964,12 +772,10 @@ private fun CompactTelemetryMatchRow(
                     else Icons.Outlined.NotificationsNone,
                     contentDescription = stringResource(R.string.cd_match_notifications),
                     tint = if (isWatched) MaterialTheme.colorScheme.primary
-                    else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                    modifier = Modifier.size(17.dp)
+                    else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f),
+                    modifier = Modifier.size(18.dp)
                 )
             }
-        } else {
-            Spacer(modifier = Modifier.width(12.dp))
         }
     }
 }

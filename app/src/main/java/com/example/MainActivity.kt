@@ -29,7 +29,6 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -51,8 +50,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -60,48 +57,27 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
-import androidx.credentials.CredentialManager
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.lifecycle.viewmodel.initializer
-import androidx.lifecycle.viewmodel.viewModelFactory
-import com.example.auth.attemptAutoSignIn
-import com.example.auth.authStateFlow
-import com.example.auth.onGoogleSignInClicked
-import com.example.auth.signOutGoogleAndFirebase
 import com.example.data.model.AppTab
-import com.example.data.model.TeamInfo
-import com.example.data.repository.LiveChatRepository
 import com.example.notifications.MatchNotificationManager
 import com.example.ui.components.FullscreenBroadcastPlayerOverlay
 import com.example.ui.components.InstagramAccountsSheet
 import com.example.ui.components.InstagramLoginModal
 import com.example.ui.components.InstagramStoryViewerModal
 import com.example.ui.components.KeepActivityScreenOnEffect
+import com.example.ui.components.KhateBaziBottomBar
 import com.example.ui.components.KhateBaziTopBar
-import com.example.ui.components.LiveChatFeedState
-import com.example.ui.components.LiveMatchChatSlideOutOverlay
 import com.example.ui.components.NotificationSettingsSheet
-import com.example.ui.components.SportsBottomNavigation
-import com.example.ui.components.StartupSplashOverlay
 import com.example.ui.components.TabIconWithLiveBadge
 import com.example.ui.components.WatchSourceChooserSheet
 import com.example.ui.components.rememberBroadcastPlayerController
 import com.example.ui.screens.BroadcastScreen
-import com.example.ui.screens.FavoritesScreen
 import com.example.ui.screens.MatchDetailModal
 import com.example.ui.screens.NewsReaderModal
 import com.example.ui.screens.NewsScreen
-import com.example.ui.screens.PlayerProfileSheet
 import com.example.ui.screens.ScoresScreen
-import com.example.ui.screens.TeamProfileSheet
 import com.example.ui.theme.KhateBaziTheme
-import com.example.ui.viewmodel.LiveChatViewModel
 import com.example.ui.viewmodel.SportsViewModel
-import com.google.firebase.Firebase
-import com.google.firebase.auth.auth
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.MutableStateFlow
 
 class MainActivity : ComponentActivity() {
 
@@ -163,9 +139,6 @@ private fun KhateBaziApp(viewModel: SportsViewModel) {
     val scores by viewModel.scores.collectAsStateWithLifecycle()
     val news by viewModel.news.collectAsStateWithLifecycle()
     val detail by viewModel.detail.collectAsStateWithLifecycle()
-    val favoriteTeams by viewModel.favoriteTeams.collectAsStateWithLifecycle()
-    val activeTeamProfile by viewModel.activeTeamProfile.collectAsStateWithLifecycle()
-    val activePlayerProfile by viewModel.activePlayerProfile.collectAsStateWithLifecycle()
     val toastMessage by viewModel.toastMessage.collectAsStateWithLifecycle()
 
     val snackbarHostState = remember { SnackbarHostState() }
@@ -217,149 +190,7 @@ private fun KhateBaziApp(viewModel: SportsViewModel) {
         enabled = broadcast.activeProgramId != null || !broadcast.streamUrl.isNullOrBlank()
     )
 
-    var minSplashElapsed by remember { mutableStateOf(false) }
-    var maxSplashElapsed by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) {
-        delay(900L)
-        minSplashElapsed = true
-    }
-    LaunchedEffect(Unit) {
-        delay(1800L)
-        maxSplashElapsed = true
-    }
-    val initialContentReady = (!broadcast.isLoadingPrograms || broadcast.mergedGames.isNotEmpty()) ||
-        (!scores.isLoading || scores.leagues.isNotEmpty())
-    val showStartupSplash = !maxSplashElapsed && (!minSplashElapsed || !initialContentReady)
-
-    val authScope = rememberCoroutineScope()
-    val credentialManager = remember(context) { CredentialManager.create(context) }
-    val currentUser by remember { Firebase.auth.authStateFlow() }
-        .collectAsStateWithLifecycle(initialValue = Firebase.auth.currentUser)
-
-    var isChatOpen by rememberSaveable { mutableStateOf(false) }
-    var isSigningIn by remember { mutableStateOf(false) }
-    var authError by remember { mutableStateOf<String?>(null) }
-
-    LaunchedEffect(Unit) {
-        attemptAutoSignIn(
-            context = context,
-            credentialManager = credentialManager,
-            onAuthSuccess = { authError = null },
-            onUnauthenticated = {},
-            scope = authScope
-        )
-    }
-
-    val activeRoomKey = remember(broadcast.activeProgramId, broadcast.activeProgramTitle, broadcast.streamUrl) {
-        if (broadcast.activeProgramId != null || !broadcast.streamUrl.isNullOrBlank()) {
-            broadcast.activeProgramId ?: broadcast.activeProgramTitle
-        } else {
-            null
-        }
-    }
-
-    LaunchedEffect(activeRoomKey) {
-        if (activeRoomKey == null) {
-            isChatOpen = false
-        }
-    }
-
-    val chatViewModel: LiveChatViewModel? = if (currentUser != null) {
-        val uid = currentUser!!.uid
-        viewModel(
-            key = uid,
-            factory = viewModelFactory {
-                initializer {
-                    LiveChatViewModel(
-                        repository = LiveChatRepository(context.applicationContext),
-                        currentUserId = uid
-                    )
-                }
-            }
-        )
-    } else {
-        null
-    }
-
-    LaunchedEffect(chatViewModel, activeRoomKey, isChatOpen) {
-        chatViewModel?.setRoom(if (isChatOpen) activeRoomKey else null)
-    }
-
-    val emptyFeedState = remember { MutableStateFlow<LiveChatFeedState>(LiveChatFeedState.Idle) }
-    val emptySendingState = remember { MutableStateFlow(false) }
-    val chatFeedState by (chatViewModel?.feedState ?: emptyFeedState).collectAsStateWithLifecycle()
-    val isSendingChat by (chatViewModel?.isSending ?: emptySendingState).collectAsStateWithLifecycle()
-
-    val renderChatOverlay: @Composable BoxScope.(Boolean) -> Unit = { isCompactInline ->
-        LiveMatchChatSlideOutOverlay(
-            isOpen = isChatOpen,
-            isCompactInline = isCompactInline,
-            programTitle = broadcast.activeProgramTitle,
-            currentUserId = currentUser?.uid,
-            currentUserName = currentUser?.displayName,
-            feedState = chatFeedState,
-            isSending = isSendingChat,
-            isSigningIn = isSigningIn,
-            authError = authError,
-            onGoogleSignIn = {
-                if (!isSigningIn) {
-                    isSigningIn = true
-                    authError = null
-                    onGoogleSignInClicked(
-                        context = context,
-                        credentialManager = credentialManager,
-                        onAuthSuccess = {
-                            isSigningIn = false
-                            authError = null
-                        },
-                        onAuthError = { msg ->
-                            isSigningIn = false
-                            authError = msg
-                        },
-                        scope = authScope,
-                        onAuthCancelled = {
-                            isSigningIn = false
-                        }
-                    )
-                }
-            },
-            onSignOut = {
-                signOutGoogleAndFirebase(
-                    credentialManager = credentialManager,
-                    scope = authScope
-                )
-            },
-            onSendMessage = { text ->
-                chatViewModel?.sendMessage(
-                    text = text,
-                    senderNameOverride = currentUser?.displayName,
-                    onFailure = { viewModel.showToast(it) }
-                )
-            },
-            onDeleteMessage = { msgId ->
-                chatViewModel?.deleteMessage(
-                    messageId = msgId,
-                    onFailure = { viewModel.showToast(it) }
-                )
-            },
-            onClose = { isChatOpen = false }
-        )
-    }
-
-    if (isChatOpen && !broadcast.isFullscreen) {
-        BackHandler { isChatOpen = false }
-    }
-
-    if (
-        currentTab != AppTab.BROADCAST &&
-        !isChatOpen &&
-        !detail.isOpen &&
-        !broadcast.isFullscreen &&
-        news.selectedArticle == null &&
-        scores.activeStoryGroupIndex == null &&
-        activeTeamProfile == null &&
-        activePlayerProfile == null
-    ) {
+    if (currentTab != AppTab.BROADCAST && !detail.isOpen && !broadcast.isFullscreen && news.selectedArticle == null && scores.activeStoryGroupIndex == null) {
         BackHandler { viewModel.selectTab(AppTab.BROADCAST) }
     }
 
@@ -389,7 +220,7 @@ private fun KhateBaziApp(viewModel: SportsViewModel) {
             },
             bottomBar = {
                 if (!useNavigationRail) {
-                    SportsBottomNavigation(
+                    KhateBaziBottomBar(
                         currentTab = currentTab,
                         liveCount = scores.liveCount,
                         onSelectTab = { viewModel.selectTab(it) }
@@ -489,23 +320,7 @@ private fun KhateBaziApp(viewModel: SportsViewModel) {
                                 onPlayerError = { viewModel.onPlayerError(it) },
                                 onSearchChange = { viewModel.updateBroadcastSearch(it) },
                                 onRefreshPrograms = { viewModel.loadPrograms() },
-                                playerController = playerController,
-                                isChatOpen = isChatOpen,
-                                onToggleChat = { isChatOpen = !isChatOpen },
-                                chatOverlayContent = { renderChatOverlay(true) },
-                                favoriteTeams = favoriteTeams,
-                                onTeamClick = { team, leagueTitle, sport ->
-                                    viewModel.openTeamProfile(
-                                        teamName = team.name,
-                                        logoUrl = team.logoUrl,
-                                        leagueTitle = leagueTitle,
-                                        sport = sport
-                                    )
-                                },
-                                onLeagueShortcutClick = { leagueTitle ->
-                                    viewModel.updateScoreSearch(leagueTitle)
-                                    viewModel.selectTab(AppTab.SCORES)
-                                }
+                                playerController = playerController
                             )
 
                             AppTab.SCORES -> ScoresScreen(
@@ -550,48 +365,6 @@ private fun KhateBaziApp(viewModel: SportsViewModel) {
                                 onSearchChange = { viewModel.updateNewsSearch(it) },
                                 onRefreshClick = { viewModel.loadNews() },
                                 onArticleClick = { viewModel.openNewsArticle(it) }
-                            )
-
-                            AppTab.FAVORITES -> FavoritesScreen(
-                                favoriteTeams = favoriteTeams,
-                                leagues = scores.leagues,
-                                watchedMatches = watchedMatches.values.toList(),
-                                notificationSettings = notificationSettings,
-                                onToggleFavoriteTeam = { team, leagueTitle, sport ->
-                                    viewModel.toggleFavoriteTeam(
-                                        teamName = team.name,
-                                        logoUrl = team.logoUrl,
-                                        leagueTitle = leagueTitle,
-                                        sport = sport
-                                    )
-                                },
-                                onTeamClick = { team, leagueTitle, sport ->
-                                    viewModel.openTeamProfile(
-                                        teamName = team.name,
-                                        logoUrl = team.logoUrl,
-                                        leagueTitle = leagueTitle,
-                                        sport = sport
-                                    )
-                                },
-                                onMatchClick = { match, league, sport ->
-                                    viewModel.openMatchDetail(match, league, sport)
-                                },
-                                onToggleWatchMatch = { match, leagueTitle ->
-                                    if (watchedMatches.containsKey(match.id)) {
-                                        viewModel.toggleWatchMatch(match, leagueTitle)
-                                    } else {
-                                        runWithNotificationPermission {
-                                            viewModel.toggleWatchMatch(match, leagueTitle)
-                                        }
-                                    }
-                                },
-                                onUnwatchMatch = { viewModel.unwatchMatch(it) },
-                                onUpdateNotificationSettings = { viewModel.updateNotificationSettings(it) },
-                                onSendTestNotification = {
-                                    runWithNotificationPermission {
-                                        viewModel.sendTestNotification()
-                                    }
-                                }
                             )
                         }
                     }
@@ -654,6 +427,30 @@ private fun KhateBaziApp(viewModel: SportsViewModel) {
     }
 
     AnimatedVisibility(
+        visible = news.selectedArticle != null,
+        enter = slideInVertically(
+            animationSpec = spring(
+                dampingRatio = Spring.DampingRatioLowBouncy,
+                stiffness = Spring.StiffnessMediumLow
+            ),
+            initialOffsetY = { it / 3 }
+        ) + fadeIn(tween(240)),
+        exit = slideOutVertically(
+            animationSpec = tween(200),
+            targetOffsetY = { it / 3 }
+        ) + fadeOut(tween(180))
+    ) {
+        news.selectedArticle?.let { article ->
+            NewsReaderModal(
+                article = article,
+                articleBody = news.articleBody,
+                isLoadingBody = news.isLoadingArticleBody,
+                onClose = { viewModel.closeNewsArticle() }
+            )
+        }
+    }
+
+    AnimatedVisibility(
         visible = detail.isOpen,
         enter = slideInVertically(
             animationSpec = spring(
@@ -687,135 +484,7 @@ private fun KhateBaziApp(viewModel: SportsViewModel) {
                 onSelectTab = { viewModel.selectDetailTab(it) },
                 onToggleHighlight = { viewModel.toggleHighlightVideo(it) },
                 onCloseHighlight = { viewModel.closeHighlightVideo() },
-                onClose = { viewModel.closeMatchDetail() },
-                onTeamClick = { team, leagueTitle, sport ->
-                    viewModel.openTeamProfile(
-                        teamName = team.name,
-                        logoUrl = team.logoUrl,
-                        leagueTitle = leagueTitle,
-                        sport = sport
-                    )
-                },
-                onPlayerClick = { player, teamName, teamLogo ->
-                    viewModel.openPlayerProfile(
-                        player = player,
-                        teamName = teamName,
-                        teamLogoUrl = teamLogo
-                    )
-                },
-                onPlayerNameClick = { rawName, teamName, teamLogo ->
-                    viewModel.openPlayerProfileByName(
-                        rawName = rawName,
-                        teamName = teamName,
-                        teamLogoUrl = teamLogo
-                    )
-                },
-                favoriteTeamNames = favoriteTeams.map { it.name.lowercase() }.toSet(),
-                onToggleFavoriteTeam = { team, leagueTitle, sport ->
-                    viewModel.toggleFavoriteTeam(
-                        teamName = team.name,
-                        logoUrl = team.logoUrl,
-                        leagueTitle = leagueTitle,
-                        sport = sport
-                    )
-                }
-            )
-        }
-    }
-
-    AnimatedVisibility(
-        visible = activeTeamProfile != null,
-        enter = slideInVertically(
-            animationSpec = spring(
-                dampingRatio = Spring.DampingRatioLowBouncy,
-                stiffness = Spring.StiffnessMediumLow
-            ),
-            initialOffsetY = { it / 3 }
-        ) + fadeIn(tween(240)),
-        exit = slideOutVertically(
-            animationSpec = tween(200),
-            targetOffsetY = { it / 3 }
-        ) + fadeOut(tween(180))
-    ) {
-        activeTeamProfile?.let { profile ->
-            TeamProfileSheet(
-                profile = profile,
-                isFavorite = favoriteTeams.any { it.name.equals(profile.teamName, ignoreCase = true) },
-                onToggleFavorite = {
-                    viewModel.toggleFavoriteTeam(
-                        teamName = profile.teamName,
-                        logoUrl = profile.logoUrl,
-                        leagueTitle = profile.leagueTitle,
-                        sport = profile.sport
-                    )
-                },
-                onMatchClick = { match, league, sport ->
-                    viewModel.closeTeamProfile()
-                    viewModel.openMatchDetail(match, league, sport)
-                },
-                onBroadcastClick = { game ->
-                    viewModel.closeTeamProfile()
-                    viewModel.closeMatchDetail()
-                    viewModel.selectTab(AppTab.BROADCAST)
-                    viewModel.onMergedGameClicked(game)
-                },
-                onPlayerClick = { player, teamName, teamLogo ->
-                    viewModel.openPlayerProfile(player, teamName, teamLogo)
-                },
-                onArticleClick = { article ->
-                    viewModel.openNewsArticle(article)
-                },
-                onClose = { viewModel.closeTeamProfile() }
-            )
-        }
-    }
-
-    AnimatedVisibility(
-        visible = news.selectedArticle != null,
-        enter = slideInVertically(
-            animationSpec = spring(
-                dampingRatio = Spring.DampingRatioLowBouncy,
-                stiffness = Spring.StiffnessMediumLow
-            ),
-            initialOffsetY = { it / 3 }
-        ) + fadeIn(tween(240)),
-        exit = slideOutVertically(
-            animationSpec = tween(200),
-            targetOffsetY = { it / 3 }
-        ) + fadeOut(tween(180))
-    ) {
-        news.selectedArticle?.let { article ->
-            NewsReaderModal(
-                article = article,
-                articleBody = news.articleBody,
-                isLoadingBody = news.isLoadingArticleBody,
-                onClose = { viewModel.closeNewsArticle() }
-            )
-        }
-    }
-
-    AnimatedVisibility(
-        visible = activePlayerProfile != null,
-        enter = slideInVertically(
-            animationSpec = spring(
-                dampingRatio = Spring.DampingRatioLowBouncy,
-                stiffness = Spring.StiffnessMediumLow
-            ),
-            initialOffsetY = { it / 3 }
-        ) + fadeIn(tween(240)),
-        exit = slideOutVertically(
-            animationSpec = tween(200),
-            targetOffsetY = { it / 3 }
-        ) + fadeOut(tween(180))
-    ) {
-        activePlayerProfile?.let { profile ->
-            PlayerProfileSheet(
-                profile = profile,
-                onTeamClick = { teamName, teamLogo ->
-                    viewModel.closePlayerProfile()
-                    viewModel.openTeamProfile(teamName = teamName, logoUrl = teamLogo)
-                },
-                onClose = { viewModel.closePlayerProfile() }
+                onClose = { viewModel.closeMatchDetail() }
             )
         }
     }
@@ -842,13 +511,8 @@ private fun KhateBaziApp(viewModel: SportsViewModel) {
             FullscreenBroadcastPlayerOverlay(
                 controller = playerController,
                 programTitle = broadcast.activeProgramTitle,
-                onExitFullscreen = { viewModel.setFullscreen(false) },
-                isChatOpen = isChatOpen,
-                onToggleChat = { isChatOpen = !isChatOpen },
-                chatOverlayContent = { renderChatOverlay(false) }
+                onExitFullscreen = { viewModel.setFullscreen(false) }
             )
         }
-
-        StartupSplashOverlay(visible = showStartupSplash)
     }
 }

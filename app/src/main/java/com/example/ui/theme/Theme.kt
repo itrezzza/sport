@@ -9,41 +9,17 @@ import androidx.compose.material3.Shapes
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.Immutable
-import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
-@Immutable
-data class SportsSpacingTokens(
-    val xs: Dp = 4.dp,
-    val sm: Dp = 8.dp,
-    val md: Dp = 12.dp,
-    val lg: Dp = 16.dp,
-    val xl: Dp = 24.dp,
-    val xxl: Dp = 32.dp,
-    val screenHorizontal: Dp = 16.dp,
-    val cardPadding: Dp = 14.dp
-)
-
-val LocalSportsSpacing = staticCompositionLocalOf { SportsSpacingTokens() }
-
-val MaterialTheme.sportsSpacing: SportsSpacingTokens
-    @Composable
-    @ReadOnlyComposable
-    get() = LocalSportsSpacing.current
-
 private val BroadcastDarkColorScheme = darkColorScheme(
-    primary = ElectricLime,
-    onPrimary = Color(0xFF091203),
-    primaryContainer = ElectricLimeContainerDark,
-    onPrimaryContainer = OnElectricLimeContainerDark,
+    primary = EmeraldNeon,
+    onPrimary = Color(0xFF042416),
+    primaryContainer = EmeraldContainerDark,
+    onPrimaryContainer = OnEmeraldContainerDark,
     secondary = BroadcastCyan,
-    onSecondary = Color(0xFF041E2B),
+    onSecondary = Color(0xFF062033),
     secondaryContainer = BroadcastCyanContainerDark,
     onSecondaryContainer = BroadcastCyan,
     tertiary = LiveCrimson,
@@ -60,7 +36,7 @@ private val BroadcastDarkColorScheme = darkColorScheme(
     surfaceContainerHigh = MidnightSurfaceVariant,
     surfaceContainerHighest = MidnightSurfaceElevated,
     outline = MidnightBorder,
-    outlineVariant = Color(0xFF1F2733),
+    outlineVariant = Color(0xFF1F232C),
     error = LiveCrimson,
     onError = Color.White
 )
@@ -85,27 +61,26 @@ private val EditorialLightColorScheme = lightColorScheme(
     surfaceVariant = DaylightSurfaceVariant,
     onSurfaceVariant = InkMutedLight,
     surfaceContainer = DaylightSurface,
-    surfaceContainerHigh = Color(0xFFF0F4F8),
+    surfaceContainerHigh = Color(0xFFF3F5F8),
     surfaceContainerHighest = DaylightSurfaceVariant,
     outline = DaylightBorder,
-    outlineVariant = Color(0xFFE4EAF2),
+    outlineVariant = Color(0xFFE6EAF0),
     error = LiveCrimsonLight,
     onError = Color.White
 )
 
 val KhateBaziShapes = Shapes(
-    extraSmall = RoundedCornerShape(8.dp),
-    small = RoundedCornerShape(10.dp),
-    medium = RoundedCornerShape(14.dp),
-    large = RoundedCornerShape(20.dp),
-    extraLarge = RoundedCornerShape(26.dp)
+    small = RoundedCornerShape(12.dp),
+    medium = RoundedCornerShape(18.dp),
+    large = RoundedCornerShape(24.dp),
+    extraLarge = RoundedCornerShape(30.dp)
 )
 
 @Composable
 private fun animatedColor(targetValue: Color): Color {
     val color by animateColorAsState(
         targetValue = targetValue,
-        animationSpec = tween(durationMillis = 320),
+        animationSpec = tween(durationMillis = 360),
         label = "themeColor"
     )
     return color
@@ -150,12 +125,10 @@ fun KhateBaziTheme(
     val targetScheme = if (darkTheme) BroadcastDarkColorScheme else EditorialLightColorScheme
     val animatedScheme = rememberAnimatedColorScheme(targetScheme)
 
-    CompositionLocalProvider(LocalSportsSpacing provides SportsSpacingTokens()) {
-        MaterialTheme(
-            colorScheme = animatedScheme,
-            typography = KhateBaziTypography,
-            shapes = KhateBaziShapes,
-            content = content
-        )
-    }
+    MaterialTheme(
+        colorScheme = animatedScheme,
+        typography = KhateBaziTypography,
+        shapes = KhateBaziShapes,
+        content = content
+    )
 }

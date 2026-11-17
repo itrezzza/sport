@@ -20,7 +20,6 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -42,7 +41,6 @@ import androidx.compose.material.icons.rounded.AspectRatio
 import androidx.compose.material.icons.rounded.BrightnessHigh
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Forward10
-import androidx.compose.material.icons.rounded.Forum
 import androidx.compose.material.icons.rounded.Fullscreen
 import androidx.compose.material.icons.rounded.FullscreenExit
 import androidx.compose.material.icons.rounded.HighQuality
@@ -121,11 +119,7 @@ import com.example.R
 import com.example.data.model.HlsTrackOption
 import com.example.data.model.StreamQuality
 import com.example.data.network.SportsRepository
-import com.example.ui.theme.ElectricLime
 import com.example.ui.theme.LiveCrimson
-import com.example.ui.theme.MidnightBg
-import com.example.ui.theme.MidnightBorder
-import com.example.ui.theme.MidnightSurface
 import com.example.ui.theme.VazirmatnFontFamily
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -470,48 +464,6 @@ fun rememberBroadcastPlayerController(
 
 @OptIn(UnstableApi::class)
 @Composable
-fun LiveStreamingPlayer(
-    activeProgramId: String?,
-    programTitle: String,
-    sourceLabel: String,
-    playerStatus: String,
-    streamUrl: String?,
-    qualities: List<StreamQuality>,
-    activeQualityIndex: Int,
-    isFullscreen: Boolean,
-    onSelectQuality: (Int) -> Unit,
-    onToggleFullscreen: (Boolean) -> Unit,
-    onClosePlayer: () -> Unit,
-    onPlayerError: (String) -> Unit,
-    modifier: Modifier = Modifier,
-    controller: BroadcastPlayerController? = null,
-    isChatOpen: Boolean = false,
-    onToggleChat: (() -> Unit)? = null,
-    chatOverlayContent: (@Composable BoxScope.() -> Unit)? = null
-) {
-    BroadcastPlayerStage(
-        activeProgramId = activeProgramId,
-        programTitle = programTitle,
-        sourceLabel = sourceLabel,
-        playerStatus = playerStatus,
-        streamUrl = streamUrl,
-        qualities = qualities,
-        activeQualityIndex = activeQualityIndex,
-        isFullscreen = isFullscreen,
-        onSelectQuality = onSelectQuality,
-        onToggleFullscreen = onToggleFullscreen,
-        onClosePlayer = onClosePlayer,
-        onPlayerError = onPlayerError,
-        modifier = modifier,
-        controller = controller,
-        isChatOpen = isChatOpen,
-        onToggleChat = onToggleChat,
-        chatOverlayContent = chatOverlayContent
-    )
-}
-
-@OptIn(UnstableApi::class)
-@Composable
 fun BroadcastPlayerStage(
     activeProgramId: String?,
     programTitle: String,
@@ -526,10 +478,7 @@ fun BroadcastPlayerStage(
     onClosePlayer: () -> Unit,
     onPlayerError: (String) -> Unit,
     modifier: Modifier = Modifier,
-    controller: BroadcastPlayerController? = null,
-    isChatOpen: Boolean = false,
-    onToggleChat: (() -> Unit)? = null,
-    chatOverlayContent: (@Composable BoxScope.() -> Unit)? = null
+    controller: BroadcastPlayerController? = null
 ) {
     val playerController = controller ?: rememberBroadcastPlayerController(
         streamUrl = streamUrl,
@@ -553,10 +502,10 @@ fun BroadcastPlayerStage(
             modifier = modifier
                 .fillMaxWidth()
                 .testTag("broadcast_player_stage"),
-            shape = RoundedCornerShape(18.dp),
+            shape = RoundedCornerShape(22.dp),
             color = MaterialTheme.colorScheme.surface,
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)),
-            tonalElevation = 2.dp
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)),
+            tonalElevation = 4.dp
         ) {
             Column(modifier = Modifier.padding(14.dp)) {
                 Row(
@@ -569,17 +518,15 @@ fun BroadcastPlayerStage(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
-                            LiveBeaconLottie(size = 13.dp)
+                            LivePulseDot(color = LiveCrimson, size = 6.dp)
                             Text(
                                 text = sourceLabel,
                                 style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.primary
                             )
                             Surface(
-                                shape = RoundedCornerShape(8.dp),
-                                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.85f),
-                                border = BorderStroke(0.6.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)),
+                                shape = RoundedCornerShape(99.dp),
+                                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.72f),
                                 modifier = Modifier.testTag("player_keep_screen_on_badge")
                             ) {
                                 Row(
@@ -612,55 +559,17 @@ fun BroadcastPlayerStage(
                         )
                     }
 
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    IconButton(
+                        onClick = onClosePlayer,
+                        modifier = Modifier
+                            .minimumInteractiveComponentSize()
+                            .testTag("player_close_button")
                     ) {
-                        if (onToggleChat != null) {
-                            Surface(
-                                shape = RoundedCornerShape(99.dp),
-                                color = if (isChatOpen) MaterialTheme.colorScheme.primary
-                                else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.85f),
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(99.dp))
-                                    .clickable { onToggleChat() }
-                                    .testTag("player_header_chat_button")
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Rounded.Forum,
-                                        contentDescription = "گفتگوی زنده",
-                                        tint = if (isChatOpen) MaterialTheme.colorScheme.onPrimary
-                                        else MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.size(15.dp)
-                                    )
-                                    Text(
-                                        text = "گفتگو",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        fontWeight = FontWeight.Bold,
-                                        color = if (isChatOpen) MaterialTheme.colorScheme.onPrimary
-                                        else MaterialTheme.colorScheme.onSurface
-                                    )
-                                }
-                            }
-                        }
-
-                        IconButton(
-                            onClick = onClosePlayer,
-                            modifier = Modifier
-                                .minimumInteractiveComponentSize()
-                                .testTag("player_close_button")
-                        ) {
-                            Icon(
-                                imageVector = Icons.Rounded.Close,
-                                contentDescription = "بستن پخش‌کننده",
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
+                        Icon(
+                            imageVector = Icons.Rounded.Close,
+                            contentDescription = "بستن پخش‌کننده",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 }
 
@@ -672,11 +581,11 @@ fun BroadcastPlayerStage(
                 ) {
                     Box(
                         modifier = Modifier
-                            .widthIn(max = 480.dp)
+                            .widthIn(max = 460.dp)
                             .fillMaxWidth()
                             .aspectRatio(16f / 9f)
-                            .clip(RoundedCornerShape(14.dp))
-                            .background(MidnightBg),
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(Color(0xFF050911)),
                         contentAlignment = Alignment.Center
                     ) {
                         when {
@@ -686,10 +595,7 @@ fun BroadcastPlayerStage(
                                     keepScreenOn = keepScreenAwake,
                                     isFullscreen = false,
                                     programTitle = programTitle,
-                                    onToggleFullscreen = { onToggleFullscreen(true) },
-                                    isChatOpen = isChatOpen,
-                                    onToggleChat = onToggleChat,
-                                    chatOverlayContent = chatOverlayContent
+                                    onToggleFullscreen = { onToggleFullscreen(true) }
                                 )
                             }
 
@@ -820,10 +726,7 @@ fun FullscreenBroadcastPlayerOverlay(
     controller: BroadcastPlayerController,
     programTitle: String,
     onExitFullscreen: () -> Unit,
-    modifier: Modifier = Modifier,
-    isChatOpen: Boolean = false,
-    onToggleChat: (() -> Unit)? = null,
-    chatOverlayContent: (@Composable BoxScope.() -> Unit)? = null
+    modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     val view = LocalView.current
@@ -865,10 +768,7 @@ fun FullscreenBroadcastPlayerOverlay(
             onToggleFullscreen = {
                 controller.showFullscreenQualityMenu = false
                 onExitFullscreen()
-            },
-            isChatOpen = isChatOpen,
-            onToggleChat = onToggleChat,
-            chatOverlayContent = chatOverlayContent
+            }
         )
     }
 }
@@ -880,10 +780,7 @@ private fun ProVideoSurfaceWithHud(
     keepScreenOn: Boolean,
     isFullscreen: Boolean,
     programTitle: String,
-    onToggleFullscreen: () -> Unit,
-    isChatOpen: Boolean = false,
-    onToggleChat: (() -> Unit)? = null,
-    chatOverlayContent: (@Composable BoxScope.() -> Unit)? = null
+    onToggleFullscreen: () -> Unit
 ) {
     val isSeekable = controller.isSeekable
     val playbackError = controller.playbackError
@@ -1034,13 +931,13 @@ private fun ProVideoSurfaceWithHud(
                         ) {
                             if (controller.isLiveStream) {
                                 Surface(
-                                    shape = RoundedCornerShape(8.dp),
-                                    color = if (controller.isAtLiveEdge) LiveCrimson else MidnightBg.copy(alpha = 0.78f),
+                                    shape = RoundedCornerShape(99.dp),
+                                    color = if (controller.isAtLiveEdge) LiveCrimson else Color.Black.copy(alpha = 0.65f),
                                     border = if (!controller.isAtLiveEdge) {
                                         BorderStroke(1.dp, LiveCrimson)
                                     } else null,
                                     modifier = Modifier
-                                        .clip(RoundedCornerShape(8.dp))
+                                        .clip(RoundedCornerShape(99.dp))
                                         .clickable(enabled = !controller.isAtLiveEdge) {
                                             controller.jumpToLiveEdge()
                                         }
@@ -1051,7 +948,10 @@ private fun ProVideoSurfaceWithHud(
                                         verticalAlignment = Alignment.CenterVertically,
                                         horizontalArrangement = Arrangement.spacedBy(5.dp)
                                     ) {
-                                        LiveBeaconLottie(size = 12.dp)
+                                        LivePulseDot(
+                                            color = if (controller.isAtLiveEdge) Color.White else LiveCrimson,
+                                            size = 5.dp
+                                        )
                                         Text(
                                             text = if (controller.isAtLiveEdge) "پخش زنده" else "بازگشت به زنده",
                                             style = MaterialTheme.typography.labelSmall,
@@ -1103,40 +1003,6 @@ private fun ProVideoSurfaceWithHud(
                                             text = controller.hlsTracks.firstOrNull { it.id == controller.selectedTrackId }?.label ?: "کیفیت",
                                             style = MaterialTheme.typography.labelSmall,
                                             color = Color.White
-                                        )
-                                    }
-                                }
-                            }
-
-                            if (onToggleChat != null) {
-                                Surface(
-                                    shape = RoundedCornerShape(99.dp),
-                                    color = if (isChatOpen) MaterialTheme.colorScheme.primary
-                                    else Color.Black.copy(alpha = 0.56f),
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(99.dp))
-                                        .clickable {
-                                            controller.hudInteractionTick += 1
-                                            onToggleChat()
-                                        }
-                                        .testTag("player_chat_toggle_button")
-                                ) {
-                                    Row(
-                                        modifier = Modifier.padding(horizontal = 9.dp, vertical = 6.dp),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Rounded.Forum,
-                                            contentDescription = "گفتگوی زنده",
-                                            tint = if (isChatOpen) MaterialTheme.colorScheme.onPrimary else Color.White,
-                                            modifier = Modifier.size(15.dp)
-                                        )
-                                        Text(
-                                            text = if (isFullscreen) "گفتگوی زنده" else "چت",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            fontWeight = FontWeight.Bold,
-                                            color = if (isChatOpen) MaterialTheme.colorScheme.onPrimary else Color.White
                                         )
                                     }
                                 }
@@ -1265,9 +1131,9 @@ private fun ProVideoSurfaceWithHud(
                             .align(Alignment.TopEnd)
                             .statusBarsPadding()
                             .padding(top = 56.dp, end = 16.dp),
-                        shape = RoundedCornerShape(14.dp),
-                        color = MidnightSurface.copy(alpha = 0.94f),
-                        border = BorderStroke(1.dp, MidnightBorder)
+                        shape = RoundedCornerShape(16.dp),
+                        color = Color(0xEE101620),
+                        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.18f))
                     ) {
                         Column(
                             modifier = Modifier.padding(10.dp),
@@ -1394,32 +1260,6 @@ private fun ProVideoSurfaceWithHud(
                 }
             }
         }
-
-        if (onToggleChat != null && !controlsVisible && !isChatOpen && playbackError == null) {
-            Surface(
-                shape = RoundedCornerShape(topStart = 14.dp, bottomStart = 14.dp),
-                color = Color.Black.copy(alpha = 0.44f),
-                border = BorderStroke(0.6.dp, Color.White.copy(alpha = 0.2f)),
-                modifier = Modifier
-                    .align(Alignment.CenterEnd)
-                    .clickable { onToggleChat() }
-                    .testTag("player_chat_edge_tab")
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 7.dp, vertical = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        imageVector = Icons.Rounded.Forum,
-                        contentDescription = "باز کردن گفتگوی زنده",
-                        tint = Color.White.copy(alpha = 0.9f),
-                        modifier = Modifier.size(16.dp)
-                    )
-                }
-            }
-        }
-
-        chatOverlayContent?.invoke(this)
     }
 }
 

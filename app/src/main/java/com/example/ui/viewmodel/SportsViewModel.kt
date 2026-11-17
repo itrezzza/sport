@@ -9,12 +9,10 @@ import com.example.data.model.BroadcastFilter
 import com.example.data.model.BroadcastProgram
 import com.example.data.model.BroadcastSource
 import com.example.data.model.ConnectionSettings
-import com.example.data.model.FavoriteTeam
 import com.example.data.model.HighlightVideo
 import com.example.data.model.InstagramSession
 import com.example.data.model.InstagramStoryTrayGroup
 import com.example.data.model.LeagueGroup
-import com.example.data.model.LineupPlayer
 import com.example.data.model.MatchDetailInfo
 import com.example.data.model.MatchEntry
 import com.example.data.model.MatchEvent
@@ -23,12 +21,9 @@ import com.example.data.model.MergedBroadcastGame
 import com.example.data.model.NewsArticle
 import com.example.data.model.NewsCategory
 import com.example.data.model.NotificationSettings
-import com.example.data.model.PlayerMatchContribution
-import com.example.data.model.PlayerProfileData
 import com.example.data.model.ScoreFilter
 import com.example.data.model.SportCategory
 import com.example.data.model.StreamQuality
-import com.example.data.model.TeamProfileData
 import com.example.data.model.WatchedMatch
 import com.example.data.network.HttpStatusException
 import com.example.data.network.InstagramAuthRequiredException
@@ -161,15 +156,6 @@ class SportsViewModel(application: Application) : AndroidViewModel(application) 
     private val _news = MutableStateFlow(NewsUiState())
     val news: StateFlow<NewsUiState> = _news.asStateFlow()
 
-    private val _favoriteTeams = MutableStateFlow<List<FavoriteTeam>>(emptyList())
-    val favoriteTeams: StateFlow<List<FavoriteTeam>> = _favoriteTeams.asStateFlow()
-
-    private val _activeTeamProfile = MutableStateFlow<TeamProfileData?>(null)
-    val activeTeamProfile: StateFlow<TeamProfileData?> = _activeTeamProfile.asStateFlow()
-
-    private val _activePlayerProfile = MutableStateFlow<PlayerProfileData?>(null)
-    val activePlayerProfile: StateFlow<PlayerProfileData?> = _activePlayerProfile.asStateFlow()
-
     private var pendingDeepLinkMatchId: String? = null
 
     private var programsJob: Job? = null
@@ -189,7 +175,6 @@ class SportsViewModel(application: Application) : AndroidViewModel(application) 
             _notificationSettings.value = settingsStore.notificationSettingsFlow.first()
             val savedWatched = settingsStore.watchedMatchesFlow.first()
             _watchedMatches.value = savedWatched
-            _favoriteTeams.value = settingsStore.favoriteTeamsFlow.first()
             val savedAccounts = settingsStore.instagramUsernamesFlow.first()
             val savedIgSession = settingsStore.instagramSessionFlow.first()
             _scores.update {
@@ -209,7 +194,8 @@ class SportsViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     private fun currentPollIntervalMs(): Long {
-        return if (_currentTab.value == AppTab.SCORES || _detail.value.isOpen) {
+        val tickerHasLive = _currentTab.value == AppTab.BROADCAST && _scores.value.liveCount > 0
+        return if (_currentTab.value == AppTab.SCORES || _detail.value.isOpen || tickerHasLive) {
             15_000L
         } else {
             45_000L
@@ -1204,7 +1190,7 @@ class SportsViewModel(application: Application) : AndroidViewModel(application) 
             activeTab = DetailTab.TIMELINE,
             isLoadingEvents = sport == 1,
             isLoadingDetails = sport == 1,
-            eventsMessage = if (sport != 1) "رویدادهای این رشته در منبع فعلی موجود نیست." else null,
+            eventsMessage = if (sport != 1) "رویدادهای این رشته در API فعلی موجود نیست؛ صفحهٔ کامل مسابقه را باز کن." else null,
             detailsMessage = if (sport != 1) "آمار و ترکیب این رشته در API فعلی موجود نیست." else null
         )
 
@@ -1247,7 +1233,7 @@ class SportsViewModel(application: Application) : AndroidViewModel(application) 
                     onFailure = {
                         state.copy(
                             isLoadingDetails = false,
-                            detailsMessage = "آمار و ترکیب این مسابقه فعلاً در دسترس نیست."
+                            detailsMessage = "آمار و ترکیب فعلاً در دسترس نیست؛ تایم‌لاین و صفحهٔ کامل بازی قابل مشاهده‌اند."
                         )
                     }
                 )
@@ -1341,179 +1327,5 @@ class SportsViewModel(application: Application) : AndroidViewModel(application) 
         highlightJob?.cancel()
         _detail.value = MatchDetailUiState(isOpen = false)
         startOrRestartScorePolling()
-    }
-
-    fun toggleFavoriteTeam(
-        teamName: String,
-        logoUrl: String = "",
-        leagueTitle: String = "",
-        sport: Int = 1
-    ) {
-        val cleanName = teamName.trim()
-        if (cleanName.isBlank()) return
-        val current = _favoriteTeams.value.toMutableList()
-        val existingIdx = current.indexOfFirst { it.name.equals(cleanName, ignoreCase = true) }
-        if (existingIdx >= 0) {
-            current.removeAt(existingIdx)
-            showToast("«$cleanName» از تیم‌های محبوب حذف شد.")
-        } else {
-            current.add(
-                0,
-                FavoriteTeam(
-                    name = cleanName,
-                    logoUrl = logoUrl,
-                    leagueTitle = leagueTitle,
-                    sport = sport
-                )
-            )
-            showToast("«$cleanName» به تیم‌های محبوب اضافه شد.")
-        }
-        _favoriteTeams.value = current
-        viewModelScope.launch { settingsStore.saveFavoriteTeams(current) }
-    }
-
-    fun openTeamProfile(
-        teamName: String,
-        logoUrl: String = "",
-        leagueTitle: String = "",
-        sport: Int = 1
-    ) {
-        val cleanName = teamName.trim()
-        if (cleanName.isBlank()) return
-
-        val teamMatches = _scores.value.leagues.flatMap { league ->
-            league.matches.filter { m ->
-                m.host.name.equals(cleanName, ignoreCase = true) ||
-                    m.guest.name.equals(cleanName, ignoreCase = true) ||
-                    m.host.name.contains(cleanName, ignoreCase = true) ||
-                    m.guest.name.contains(cleanName, ignoreCase = true)
-            }.map { m ->
-                MatchEntry(match = m, leagueTitle = league.title, sport = league.sport)
-            }
-        }
-
-        val resolvedLogo = logoUrl.ifBlank {
-            teamMatches.firstNotNullOfOrNull { entry ->
-                when {
-                    entry.match.host.name.equals(cleanName, ignoreCase = true) -> entry.match.host.logoUrl.takeIf { it.isNotBlank() }
-                    entry.match.guest.name.equals(cleanName, ignoreCase = true) -> entry.match.guest.logoUrl.takeIf { it.isNotBlank() }
-                    else -> null
-                }
-            }.orEmpty()
-        }
-
-        val resolvedLeague = leagueTitle.ifBlank {
-            teamMatches.firstOrNull()?.leagueTitle.orEmpty()
-        }
-
-        val teamBroadcasts = _broadcast.value.mergedGames.filter { game ->
-            game.title.contains(cleanName, ignoreCase = true)
-        }
-
-        val currentDetail = _detail.value
-        val matchedSide = when {
-            currentDetail.isOpen && currentDetail.match?.host?.name.equals(cleanName, ignoreCase = true) ->
-                currentDetail.detailInfo?.hostLineup
-            currentDetail.isOpen && currentDetail.match?.guest?.name.equals(cleanName, ignoreCase = true) ->
-                currentDetail.detailInfo?.guestLineup
-            else -> null
-        }
-
-        val relatedNews = _news.value.articles.filter { article ->
-            article.title.contains(cleanName, ignoreCase = true) ||
-                article.summary.contains(cleanName, ignoreCase = true)
-        }.take(6)
-
-        _activeTeamProfile.value = TeamProfileData(
-            teamName = cleanName,
-            logoUrl = resolvedLogo,
-            leagueTitle = resolvedLeague,
-            sport = teamMatches.firstOrNull()?.sport ?: sport,
-            matches = teamMatches,
-            broadcastGames = teamBroadcasts,
-            squadPlayers = matchedSide?.let { it.starters + it.bench }.orEmpty(),
-            formation = matchedSide?.formation.orEmpty(),
-            coach = matchedSide?.coach.orEmpty(),
-            relatedNews = relatedNews
-        )
-    }
-
-    fun closeTeamProfile() {
-        _activeTeamProfile.value = null
-    }
-
-    fun openPlayerProfile(
-        player: LineupPlayer,
-        teamName: String,
-        teamLogoUrl: String = ""
-    ) {
-        val currentDetail = _detail.value
-        val events = currentDetail.events
-        val playerName = player.name.trim()
-
-        val contributions = events.filter { ev ->
-            playerName.isNotBlank() && (
-                ev.strikerName.contains(playerName, ignoreCase = true) ||
-                    ev.assisterName.contains(playerName, ignoreCase = true) ||
-                    ev.description.contains(playerName, ignoreCase = true)
-                )
-        }.map { ev ->
-            PlayerMatchContribution(
-                minute = "${SportsRepository.toPersianDigits(ev.time)}′",
-                title = ev.titleLabel,
-                detail = ev.description.ifBlank { ev.decisionTitle },
-                eventType = ev.eventType
-            )
-        }
-
-        val goalsCount = events.count { ev ->
-            ev.eventType == 1 && playerName.isNotBlank() &&
-                (ev.strikerName.contains(playerName, ignoreCase = true) || ev.description.contains(playerName, ignoreCase = true))
-        }
-        val assistsCount = events.count { ev ->
-            playerName.isNotBlank() && ev.assisterName.contains(playerName, ignoreCase = true)
-        }
-        val cardsCount = events.count { ev ->
-            playerName.isNotBlank() && ev.description.contains(playerName, ignoreCase = true) &&
-                (ev.description.contains("کارت زرد") || ev.description.contains("کارت قرمز"))
-        }
-
-        val matchLabel = currentDetail.match?.let { m ->
-            "${m.host.name} ـ ${m.guest.name}"
-        }.orEmpty()
-
-        _activePlayerProfile.value = PlayerProfileData(
-            player = player,
-            teamName = teamName,
-            teamLogoUrl = teamLogoUrl,
-            leagueTitle = currentDetail.leagueTitle,
-            matchLabel = matchLabel,
-            contributions = contributions,
-            goalsCount = goalsCount,
-            assistsCount = assistsCount,
-            cardsCount = cardsCount
-        )
-    }
-
-    fun openPlayerProfileByName(
-        rawName: String,
-        teamName: String,
-        teamLogoUrl: String = ""
-    ) {
-        val clean = rawName.trim()
-        if (clean.isBlank()) return
-        val currentDetail = _detail.value
-        val allPlayers = listOfNotNull(
-            currentDetail.detailInfo?.hostLineup,
-            currentDetail.detailInfo?.guestLineup
-        ).flatMap { it.starters + it.bench }
-        val matched = allPlayers.firstOrNull {
-            it.name.equals(clean, ignoreCase = true) || it.name.contains(clean, ignoreCase = true)
-        } ?: LineupPlayer(name = clean)
-        openPlayerProfile(player = matched, teamName = teamName, teamLogoUrl = teamLogoUrl)
-    }
-
-    fun closePlayerProfile() {
-        _activePlayerProfile.value = null
     }
 }

@@ -198,48 +198,8 @@ data class ConnectionSettings(
 enum class AppTab(val route: String, val labelFa: String) {
     BROADCAST("broadcast", "پخش زنده"),
     SCORES("scores", "نتایج زنده"),
-    NEWS("news", "اخبار"),
-    FAVORITES("favorites", "علاقه‌مندی")
+    NEWS("news", "اخبار")
 }
-
-data class FavoriteTeam(
-    val name: String,
-    val logoUrl: String = "",
-    val leagueTitle: String = "",
-    val sport: Int = 1
-)
-
-data class TeamProfileData(
-    val teamName: String,
-    val logoUrl: String = "",
-    val leagueTitle: String = "",
-    val sport: Int = 1,
-    val matches: List<MatchEntry> = emptyList(),
-    val broadcastGames: List<MergedBroadcastGame> = emptyList(),
-    val squadPlayers: List<LineupPlayer> = emptyList(),
-    val formation: String = "",
-    val coach: String = "",
-    val relatedNews: List<NewsArticle> = emptyList()
-)
-
-data class PlayerMatchContribution(
-    val minute: String,
-    val title: String,
-    val detail: String,
-    val eventType: Int
-)
-
-data class PlayerProfileData(
-    val player: LineupPlayer,
-    val teamName: String,
-    val teamLogoUrl: String = "",
-    val leagueTitle: String = "",
-    val matchLabel: String = "",
-    val contributions: List<PlayerMatchContribution> = emptyList(),
-    val goalsCount: Int = 0,
-    val assistsCount: Int = 0,
-    val cardsCount: Int = 0
-)
 
 enum class NewsCategory(val labelFa: String) {
     ALL("همه"),
@@ -328,3 +288,6 @@ data class InstagramSession(
     val isAuthenticated: Boolean
         get() = cookieHeader.contains("sessionid=") && cookieHeader.isNotBlank()
 }
+
+
+

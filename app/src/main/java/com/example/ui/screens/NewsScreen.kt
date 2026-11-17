@@ -1,22 +1,21 @@
 package com.example.ui.screens
 
+import android.content.Intent
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -24,6 +23,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -33,18 +33,22 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.pager.HorizontalPager
-import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.OpenInNew
+import androidx.compose.material.icons.rounded.AutoAwesomeMosaic
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Newspaper
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -57,19 +61,17 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -79,28 +81,16 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.util.lerp
+import androidx.core.net.toUri
 import coil.compose.SubcomposeAsyncImage
 import coil.request.ImageRequest
 import com.example.R
 import com.example.data.model.NewsArticle
 import com.example.data.model.NewsCategory
 import com.example.data.network.SportsRepository
-import com.example.ui.components.EmptyCrestLottie
-import com.example.ui.components.MatchSkeletonLoader
-import com.example.ui.components.MatchSkeletonVariant
 import com.example.ui.components.StaggeredEntrance
 import com.example.ui.components.bouncyClickable
-import com.example.ui.components.rememberBroadcastShimmerBrush
-import com.example.ui.components.rememberReducedMotionEnabled
-import com.example.ui.theme.ElectricLime
-import com.example.ui.theme.MidnightBg
-import com.example.ui.theme.MidnightBorder
 import com.example.ui.viewmodel.NewsUiState
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.isActive
-import kotlinx.coroutines.launch
-import kotlin.math.absoluteValue
 
 @Composable
 fun NewsScreen(
@@ -122,13 +112,6 @@ fun NewsScreen(
                 article.summary.contains(query, ignoreCase = true)
             categoryOk && queryOk
         }
-    }
-    val (sliderArticles, wireArticles) = remember(filtered) {
-        val photoFirst = filtered.filter { it.imageUrl.isNotBlank() }
-        val withoutPhoto = filtered.filter { it.imageUrl.isBlank() }
-        val slider = (photoFirst + withoutPhoto).take(5)
-        val sliderIds = slider.map { it.id }.toSet()
-        slider to filtered.filter { it.id !in sliderIds }
     }
 
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
@@ -157,7 +140,7 @@ fun NewsScreen(
                                 val selected = newsState.selectedCategory == category
                                 val chipBg by animateColorAsState(
                                     targetValue = if (selected) MaterialTheme.colorScheme.primary
-                                    else MaterialTheme.colorScheme.surface,
+                                    else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.72f),
                                     animationSpec = tween(220),
                                     label = "newsCategoryBg"
                                 )
@@ -168,15 +151,10 @@ fun NewsScreen(
                                     label = "newsCategoryText"
                                 )
                                 Surface(
-                                    shape = RoundedCornerShape(10.dp),
+                                    shape = RoundedCornerShape(99.dp),
                                     color = chipBg,
-                                    border = BorderStroke(
-                                        1.dp,
-                                        if (selected) MaterialTheme.colorScheme.primary
-                                        else MaterialTheme.colorScheme.outline
-                                    ),
                                     modifier = Modifier
-                                        .clip(RoundedCornerShape(10.dp))
+                                        .clip(RoundedCornerShape(99.dp))
                                         .bouncyClickable(pressedScale = 0.94f) {
                                             onCategoryChange(category)
                                         }
@@ -185,7 +163,7 @@ fun NewsScreen(
                                     Text(
                                         text = category.labelFa,
                                         style = MaterialTheme.typography.labelMedium,
-                                        fontWeight = if (selected) FontWeight.ExtraBold else FontWeight.Medium,
+                                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
                                         color = chipText,
                                         modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
                                     )
@@ -253,12 +231,10 @@ fun NewsScreen(
                                     }
                                 }
                             } else null,
-                            shape = RoundedCornerShape(14.dp),
+                            shape = RoundedCornerShape(16.dp),
                             colors = OutlinedTextFieldDefaults.colors(
                                 focusedBorderColor = MaterialTheme.colorScheme.primary,
-                                unfocusedBorderColor = MaterialTheme.colorScheme.outline,
-                                focusedContainerColor = MaterialTheme.colorScheme.surface,
-                                unfocusedContainerColor = MaterialTheme.colorScheme.surface
+                                unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant
                             ),
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -271,24 +247,95 @@ fun NewsScreen(
             if (newsState.isLoading && newsState.articles.isEmpty()) {
                 item(key = "news_loading_skeleton") {
                     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        MatchSkeletonLoader(variant = MatchSkeletonVariant.HERO_CARD)
-                        MatchSkeletonLoader(variant = MatchSkeletonVariant.LIST_ROWS)
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(242.dp)
+                                .clip(RoundedCornerShape(24.dp))
+                                .background(MaterialTheme.colorScheme.surfaceVariant)
+                        ) {
+                            NewsShimmerOverlay(modifier = Modifier.fillMaxSize())
+                        }
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(22.dp),
+                            color = MaterialTheme.colorScheme.surface,
+                            tonalElevation = 1.dp
+                        ) {
+                            Column {
+                                repeat(4) { idx ->
+                                    Row(
+                                        modifier = Modifier.padding(14.dp),
+                                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .width(106.dp)
+                                                .height(78.dp)
+                                                .clip(RoundedCornerShape(14.dp))
+                                                .background(MaterialTheme.colorScheme.surfaceVariant)
+                                        ) {
+                                            NewsShimmerOverlay(modifier = Modifier.fillMaxSize())
+                                        }
+                                        Column(
+                                            modifier = Modifier.weight(1f),
+                                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .fillMaxWidth(0.38f)
+                                                    .height(10.dp)
+                                                    .clip(RoundedCornerShape(6.dp))
+                                                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                                            )
+                                            Box(
+                                                modifier = Modifier
+                                                    .fillMaxWidth(0.95f)
+                                                    .height(14.dp)
+                                                    .clip(RoundedCornerShape(6.dp))
+                                                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                                            )
+                                            Box(
+                                                modifier = Modifier
+                                                    .fillMaxWidth(0.72f)
+                                                    .height(14.dp)
+                                                    .clip(RoundedCornerShape(6.dp))
+                                                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                                            )
+                                        }
+                                    }
+                                    if (idx < 3) {
+                                        HorizontalDivider(
+                                            modifier = Modifier.padding(horizontal = 14.dp),
+                                            thickness = 0.5.dp,
+                                            color = MaterialTheme.colorScheme.outlineVariant
+                                        )
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             } else if (filtered.isEmpty()) {
                 item(key = "news_empty") {
                     Surface(
                         modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(16.dp),
+                        shape = RoundedCornerShape(22.dp),
                         color = MaterialTheme.colorScheme.surface,
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+                        tonalElevation = 1.dp
                     ) {
                         Column(
                             modifier = Modifier.padding(28.dp),
                             horizontalAlignment = Alignment.CenterHorizontally,
                             verticalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
-                            EmptyCrestLottie(size = 64.dp)
+                            Icon(
+                                imageVector = Icons.Rounded.Newspaper,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(36.dp)
+                            )
                             Text(
                                 text = newsState.errorMessage
                                     ?: "خبری با این جستجو یا دسته‌بندی پیدا نشد.",
@@ -299,7 +346,7 @@ fun NewsScreen(
                             if (newsState.errorMessage != null) {
                                 OutlinedButton(
                                     onClick = onRefreshClick,
-                                    shape = RoundedCornerShape(10.dp)
+                                    shape = RoundedCornerShape(12.dp)
                                 ) {
                                     Text("تلاش دوباره", style = MaterialTheme.typography.labelLarge)
                                 }
@@ -308,12 +355,74 @@ fun NewsScreen(
                     }
                 }
             } else {
-                item(key = "news_hero_slider") {
+                // Lead hero picks the first article with a real photo if possible so the magazine lead is always photographic
+                val heroArticle = filtered.firstOrNull { it.imageUrl.isNotBlank() } ?: filtered.first()
+                val remaining = filtered.filter { it.id != heroArticle.id }
+                val highlightArticles = if (remaining.size >= 4) {
+                    val photoFirst = remaining.filter { it.imageUrl.isNotBlank() }
+                    (if (photoFirst.size >= 2) photoFirst else remaining).take(4)
+                } else emptyList()
+                val highlightIds = highlightArticles.map { it.id }.toSet()
+                val wireArticles = remaining.filter { it.id !in highlightIds }
+
+                item(key = "news_hero_${heroArticle.id}") {
                     StaggeredEntrance(index = 0) {
-                        TrendingNewsCarousel(
-                            articles = sliderArticles,
-                            onArticleClick = onArticleClick
+                        FeaturedNewsHeroCard(
+                            article = heroArticle,
+                            onClick = { onArticleClick(heroArticle) }
                         )
+                    }
+                }
+
+                if (highlightArticles.isNotEmpty()) {
+                    item(key = "news_visual_highlights") {
+                        StaggeredEntrance(index = 1) {
+                            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Rounded.AutoAwesomeMosaic,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.secondary,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Text(
+                                            text = "تازه‌ترین‌های تصویری",
+                                            style = MaterialTheme.typography.titleSmall,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onBackground
+                                        )
+                                    }
+                                    Text(
+                                        text = "${SportsRepository.toPersianDigits(highlightArticles.size)} گزارش",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+
+                                LazyRow(
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                    contentPadding = PaddingValues(horizontal = 2.dp)
+                                ) {
+                                    itemsIndexed(
+                                        items = highlightArticles,
+                                        key = { _, item -> "hl_${item.id}" }
+                                    ) { _, article ->
+                                        NewsHighlightReelCard(
+                                            article = article,
+                                            onClick = { onArticleClick(article) }
+                                        )
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
 
@@ -330,9 +439,9 @@ fun NewsScreen(
                                     pair.forEach { article ->
                                         Surface(
                                             modifier = Modifier.weight(1f),
-                                            shape = RoundedCornerShape(16.dp),
+                                            shape = RoundedCornerShape(20.dp),
                                             color = MaterialTheme.colorScheme.surface,
-                                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+                                            tonalElevation = 1.dp
                                         ) {
                                             NewsEditorialRow(
                                                 article = article,
@@ -355,37 +464,24 @@ fun NewsScreen(
                                         horizontalArrangement = Arrangement.SpaceBetween,
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        Row(
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(7.dp)
-                                        ) {
-                                            Box(
-                                                modifier = Modifier
-                                                    .width(4.dp)
-                                                    .height(14.dp)
-                                                    .clip(RoundedCornerShape(99.dp))
-                                                    .background(MaterialTheme.colorScheme.primary)
-                                            )
-                                            Text(
-                                                text = "پیشخوان خبرها",
-                                                style = MaterialTheme.typography.titleSmall,
-                                                fontWeight = FontWeight.Black,
-                                                color = MaterialTheme.colorScheme.onBackground
-                                            )
-                                        }
+                                        Text(
+                                            text = "پیشخوان خبرها",
+                                            style = MaterialTheme.typography.titleSmall,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onBackground
+                                        )
                                         Text(
                                             text = "${SportsRepository.toPersianDigits(wireArticles.size)} خبر",
                                             style = MaterialTheme.typography.labelSmall,
-                                            color = MaterialTheme.colorScheme.primary,
-                                            fontWeight = FontWeight.Bold
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
                                     }
 
                                     Surface(
                                         modifier = Modifier.fillMaxWidth(),
-                                        shape = RoundedCornerShape(16.dp),
+                                        shape = RoundedCornerShape(22.dp),
                                         color = MaterialTheme.colorScheme.surface,
-                                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+                                        tonalElevation = 1.dp
                                     ) {
                                         Column {
                                             wireArticles.forEachIndexed { idx, article ->
@@ -396,7 +492,7 @@ fun NewsScreen(
                                                 if (idx < wireArticles.lastIndex) {
                                                     HorizontalDivider(
                                                         modifier = Modifier.padding(horizontal = 14.dp),
-                                                        thickness = 0.8.dp,
+                                                        thickness = 0.5.dp,
                                                         color = MaterialTheme.colorScheme.outlineVariant
                                                     )
                                                 }
@@ -418,158 +514,30 @@ fun NewsScreen(
 }
 
 @Composable
-fun TrendingNewsCarousel(
-    articles: List<NewsArticle>,
-    onArticleClick: (NewsArticle) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    if (articles.isEmpty()) return
-    val reducedMotion = rememberReducedMotionEnabled()
-    val pagerState = rememberPagerState(pageCount = { articles.size })
-    val isDragged by pagerState.interactionSource.collectIsDraggedAsState()
-    val scope = rememberCoroutineScope()
-
-    LaunchedEffect(articles.size, isDragged, reducedMotion) {
-        if (articles.size <= 1 || isDragged || reducedMotion) return@LaunchedEffect
-        while (isActive) {
-            delay(4800L)
-            if (!pagerState.isScrollInProgress) {
-                val next = (pagerState.currentPage + 1) % articles.size
-                pagerState.animateScrollToPage(
-                    page = next,
-                    animationSpec = tween(durationMillis = 540, easing = FastOutSlowInEasing)
-                )
-            }
-        }
-    }
-
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .testTag("news_hero_slider"),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
-    ) {
-        HorizontalPager(
-            state = pagerState,
-            pageSpacing = 12.dp,
-            beyondViewportPageCount = 1,
-            modifier = Modifier
-                .fillMaxWidth()
-                .testTag("news_hero_pager")
-        ) { page ->
-            val article = articles[page]
-            val rawOffset = (pagerState.currentPage - page) + pagerState.currentPageOffsetFraction
-            val fraction = 1f - rawOffset.absoluteValue.coerceIn(0f, 1f)
-
-            FeaturedNewsCard(
-                article = article,
-                rawOffset = rawOffset,
-                fraction = fraction,
-                onClick = {
-                    if (pagerState.currentPage != page) {
-                        scope.launch {
-                            pagerState.animateScrollToPage(
-                                page = page,
-                                animationSpec = tween(
-                                    if (reducedMotion) 0 else 460,
-                                    easing = FastOutSlowInEasing
-                                )
-                            )
-                        }
-                    } else {
-                        onArticleClick(article)
-                    }
-                }
-            )
-        }
-
-        if (articles.size > 1) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                repeat(articles.size) { index ->
-                    val selected = pagerState.currentPage == index
-                    val dotWidth by animateDpAsState(
-                        targetValue = if (selected) 24.dp else 6.dp,
-                        animationSpec = if (reducedMotion) tween(0) else spring(
-                            dampingRatio = Spring.DampingRatioMediumBouncy,
-                            stiffness = Spring.StiffnessMediumLow
-                        ),
-                        label = "newsDotWidth"
-                    )
-                    val dotColor by animateColorAsState(
-                        targetValue = if (selected) MaterialTheme.colorScheme.primary
-                        else MaterialTheme.colorScheme.outline,
-                        animationSpec = tween(if (reducedMotion) 0 else 250),
-                        label = "newsDotColor"
-                    )
-                    Box(
-                        modifier = Modifier
-                            .padding(horizontal = 3.dp)
-                            .height(5.dp)
-                            .width(dotWidth)
-                            .clip(CircleShape)
-                            .background(dotColor)
-                            .clickable {
-                                scope.launch {
-                                    pagerState.animateScrollToPage(
-                                        page = index,
-                                        animationSpec = tween(
-                                            if (reducedMotion) 0 else 460,
-                                            easing = FastOutSlowInEasing
-                                        )
-                                    )
-                                }
-                            }
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun FeaturedNewsCard(
+private fun FeaturedNewsHeroCard(
     article: NewsArticle,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    rawOffset: Float = 0f,
-    fraction: Float = 1f
+    onClick: () -> Unit
 ) {
     Surface(
-        modifier = modifier
+        modifier = Modifier
             .fillMaxWidth()
-            .graphicsLayer {
-                val scale = lerp(0.95f, 1f, fraction)
-                scaleX = scale
-                scaleY = scale
-                alpha = lerp(0.78f, 1f, fraction)
-            }
-            .clip(RoundedCornerShape(18.dp))
+            .clip(RoundedCornerShape(24.dp))
             .bouncyClickable(onClick = onClick)
             .testTag("news_hero_card_${article.id}"),
-        shape = RoundedCornerShape(18.dp),
-        color = MidnightBg,
-        border = BorderStroke(1.dp, MidnightBorder)
+        shape = RoundedCornerShape(24.dp),
+        color = Color(0xFF0A0D14),
+        shadowElevation = 6.dp
     ) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(232.dp)
+                .height(244.dp)
         ) {
             NewsCoverImage(
                 imageUrl = article.imageUrl,
                 categoryLabel = article.category.labelFa,
                 contentDescription = article.title,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .graphicsLayer {
-                        scaleX = 1.07f
-                        scaleY = 1.07f
-                        translationX = rawOffset.coerceIn(-1f, 1f) * -28f
-                    }
+                modifier = Modifier.fillMaxSize()
             )
             Box(
                 modifier = Modifier
@@ -577,9 +545,9 @@ fun FeaturedNewsCard(
                     .background(
                         Brush.verticalGradient(
                             colorStops = arrayOf(
-                                0f to Color.Black.copy(alpha = 0.12f),
-                                0.48f to MidnightBg.copy(alpha = 0.56f),
-                                1f to MidnightBg.copy(alpha = 0.96f)
+                                0f to Color.Black.copy(alpha = 0.10f),
+                                0.45f to Color(0xFF06090F).copy(alpha = 0.48f),
+                                1f to Color(0xFF04060B).copy(alpha = 0.95f)
                             )
                         )
                     )
@@ -592,40 +560,37 @@ fun FeaturedNewsCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Surface(
-                    shape = RoundedCornerShape(8.dp),
-                    color = ElectricLime
+                    shape = RoundedCornerShape(99.dp),
+                    color = MaterialTheme.colorScheme.primary
                 ) {
                     Text(
                         text = article.category.labelFa,
                         style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = Color(0xFF091203),
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onPrimary,
                         modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
                     )
                 }
-                if (article.publishedAtFa.isNotBlank()) {
-                    Surface(
-                        shape = RoundedCornerShape(8.dp),
-                        color = MidnightBg.copy(alpha = 0.72f),
-                        border = BorderStroke(0.7.dp, MidnightBorder)
+                Surface(
+                    shape = RoundedCornerShape(99.dp),
+                    color = Color.Black.copy(alpha = 0.56f)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Rounded.Schedule,
-                                contentDescription = null,
-                                tint = ElectricLime,
-                                modifier = Modifier.size(12.dp)
-                            )
-                            Text(
-                                text = article.publishedAtFa,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = Color.White.copy(alpha = 0.92f)
-                            )
-                        }
+                        Icon(
+                            imageVector = Icons.Rounded.Schedule,
+                            contentDescription = null,
+                            tint = Color.White.copy(alpha = 0.85f),
+                            modifier = Modifier.size(12.dp)
+                        )
+                        Text(
+                            text = article.publishedAtFa,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color.White.copy(alpha = 0.92f)
+                        )
                     }
                 }
             }
@@ -635,12 +600,12 @@ fun FeaturedNewsCard(
                     .align(Alignment.BottomStart)
                     .fillMaxWidth()
                     .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(5.dp)
+                verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 Text(
                     text = article.title,
                     style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Black,
+                    fontWeight = FontWeight.ExtraBold,
                     color = Color.White,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis
@@ -651,6 +616,85 @@ fun FeaturedNewsCard(
                         style = MaterialTheme.typography.bodySmall,
                         color = Color(0xFFD5E0F2),
                         maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun NewsHighlightReelCard(
+    article: NewsArticle,
+    onClick: () -> Unit
+) {
+    Surface(
+        modifier = Modifier
+            .width(196.dp)
+            .clip(RoundedCornerShape(20.dp))
+            .bouncyClickable(onClick = onClick)
+            .testTag("news_card_${article.id}"),
+        shape = RoundedCornerShape(20.dp),
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = 2.dp
+    ) {
+        Column {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(16f / 10f)
+            ) {
+                NewsCoverImage(
+                    imageUrl = article.imageUrl,
+                    categoryLabel = article.category.labelFa,
+                    contentDescription = article.title,
+                    modifier = Modifier.fillMaxSize()
+                )
+                Surface(
+                    shape = RoundedCornerShape(99.dp),
+                    color = Color.Black.copy(alpha = 0.6f),
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .padding(8.dp)
+                ) {
+                    Text(
+                        text = article.category.labelFa,
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                    )
+                }
+            }
+            Column(
+                modifier = Modifier.padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Text(
+                    text = article.title,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 2,
+                    minLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.Schedule,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(12.dp)
+                    )
+                    Text(
+                        text = article.publishedAtFa,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
                 }
@@ -679,9 +723,9 @@ private fun NewsEditorialRow(
             categoryLabel = article.category.labelFa,
             contentDescription = article.title,
             modifier = Modifier
-                .width(104.dp)
-                .height(76.dp)
-                .clip(RoundedCornerShape(10.dp))
+                .width(106.dp)
+                .height(78.dp)
+                .clip(RoundedCornerShape(14.dp))
         )
 
         Column(
@@ -694,24 +738,22 @@ private fun NewsEditorialRow(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Surface(
-                    shape = RoundedCornerShape(6.dp),
-                    color = MaterialTheme.colorScheme.primaryContainer
+                    shape = RoundedCornerShape(7.dp),
+                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.72f)
                 ) {
                     Text(
                         text = article.category.labelFa,
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
                         modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp)
                     )
                 }
-                if (article.publishedAtFa.isNotBlank()) {
-                    Text(
-                        text = article.publishedAtFa,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
+                Text(
+                    text = article.publishedAtFa,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
             Text(
                 text = article.title,
@@ -806,7 +848,7 @@ private fun NewsMinimalPlaceholder(
             Icon(
                 imageVector = Icons.Rounded.Newspaper,
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.85f),
+                tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f),
                 modifier = Modifier.size(22.dp)
             )
             Text(
@@ -822,8 +864,28 @@ private fun NewsMinimalPlaceholder(
 
 @Composable
 private fun NewsShimmerOverlay(modifier: Modifier = Modifier) {
+    val transition = rememberInfiniteTransition(label = "newsShimmer")
+    val progress by transition.animateFloat(
+        initialValue = -0.5f,
+        targetValue = 1.5f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1150, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "newsShimmerOffset"
+    )
     Box(
-        modifier = modifier.background(rememberBroadcastShimmerBrush())
+        modifier = modifier.background(
+            Brush.linearGradient(
+                colors = listOf(
+                    Color.Transparent,
+                    Color.White.copy(alpha = 0.14f),
+                    Color.Transparent
+                ),
+                start = Offset(progress * 450f - 180f, 0f),
+                end = Offset(progress * 450f + 180f, 260f)
+            )
+        )
     )
 }
 
@@ -834,6 +896,7 @@ fun NewsReaderModal(
     isLoadingBody: Boolean,
     onClose: () -> Unit
 ) {
+    val context = LocalContext.current
     BackHandler { onClose() }
 
     Surface(
@@ -881,23 +944,21 @@ fun NewsReaderModal(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Surface(
-                        shape = RoundedCornerShape(8.dp),
-                        color = MidnightBg.copy(alpha = 0.72f),
-                        border = BorderStroke(0.8.dp, MidnightBorder)
+                        shape = RoundedCornerShape(99.dp),
+                        color = Color.Black.copy(alpha = 0.56f)
                     ) {
                         Text(
                             text = "${article.sourceName} · ${article.category.labelFa}",
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold,
-                            color = ElectricLime,
+                            color = Color.White,
                             modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
                         )
                     }
 
                     Surface(
                         shape = CircleShape,
-                        color = MidnightBg.copy(alpha = 0.72f),
-                        border = BorderStroke(0.8.dp, MidnightBorder)
+                        color = Color.Black.copy(alpha = 0.56f)
                     ) {
                         IconButton(
                             onClick = onClose,
@@ -921,38 +982,35 @@ fun NewsReaderModal(
                     .padding(horizontal = 18.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
-                if (article.publishedAtFa.isNotBlank()) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Rounded.Schedule,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(14.dp)
-                        )
-                        Text(
-                            text = article.publishedAtFa,
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    }
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.Schedule,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Text(
+                        text = article.publishedAtFa,
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
                 }
 
                 Text(
                     text = article.title,
                     style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Black,
+                    fontWeight = FontWeight.ExtraBold,
                     color = MaterialTheme.colorScheme.onBackground
                 )
 
                 if (article.summary.isNotBlank()) {
                     Surface(
-                        shape = RoundedCornerShape(14.dp),
-                        color = MaterialTheme.colorScheme.surface,
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+                        shape = RoundedCornerShape(16.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.65f)
                     ) {
                         Row(modifier = Modifier.fillMaxWidth()) {
                             Box(
@@ -979,13 +1037,42 @@ fun NewsReaderModal(
                             .padding(vertical = 28.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                        CircularProgressIndicator()
                     }
                 } else if (articleBody.isNotBlank()) {
                     Text(
                         text = SportsRepository.toPersianDigits(articleBody),
                         style = MaterialTheme.typography.bodyLarge.copy(lineHeight = 29.sp),
                         color = MaterialTheme.colorScheme.onBackground
+                    )
+                }
+
+                Button(
+                    onClick = {
+                        runCatching {
+                            context.startActivity(Intent(Intent.ACTION_VIEW, article.link.toUri()))
+                        }
+                    },
+                    shape = RoundedCornerShape(16.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(50.dp)
+                        .testTag("open_news_external_button")
+                ) {
+                    Text(
+                        text = "مشاهدهٔ خبر در وب‌سایت",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Rounded.OpenInNew,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp)
                     )
                 }
 

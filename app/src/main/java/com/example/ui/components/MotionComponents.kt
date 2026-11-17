@@ -1,10 +1,7 @@
 package com.example.ui.components
 
-import android.provider.Settings
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.EnterTransition
-import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
@@ -31,30 +28,10 @@ import androidx.compose.ui.composed
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import kotlinx.coroutines.delay
-
-/**
- * Checks Android accessibility animator duration scale to respect user reduced-motion preferences.
- */
-@Composable
-fun rememberReducedMotionEnabled(): Boolean {
-    val context = LocalContext.current
-    return remember(context) {
-        try {
-            Settings.Global.getFloat(
-                context.contentResolver,
-                Settings.Global.ANIMATOR_DURATION_SCALE,
-                1f
-            ) == 0f
-        } catch (_: Throwable) {
-            false
-        }
-    }
-}
 
 /**
  * Provides tactile spring press scale + ripple + light haptic feedback.
@@ -65,13 +42,12 @@ fun Modifier.bouncyClickable(
     enableHaptics: Boolean = true,
     onClick: () -> Unit
 ): Modifier = composed {
-    val reducedMotion = rememberReducedMotionEnabled()
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
     val haptic = LocalHapticFeedback.current
 
     val scale by animateFloatAsState(
-        targetValue = if (isPressed && enabled && !reducedMotion) pressedScale else 1f,
+        targetValue = if (isPressed && enabled) pressedScale else 1f,
         animationSpec = spring(
             dampingRatio = Spring.DampingRatioMediumBouncy,
             stiffness = Spring.StiffnessMedium
@@ -80,13 +56,10 @@ fun Modifier.bouncyClickable(
     )
 
     this
-        .then(
-            if (reducedMotion) Modifier
-            else Modifier.graphicsLayer {
-                scaleX = scale
-                scaleY = scale
-            }
-        )
+        .graphicsLayer {
+            scaleX = scale
+            scaleY = scale
+        }
         .clickable(
             interactionSource = interactionSource,
             indication = ripple(bounded = true),
@@ -110,24 +83,16 @@ fun StaggeredEntrance(
     maxStaggerItems: Int = 8,
     content: @Composable () -> Unit
 ) {
-    val reducedMotion = rememberReducedMotionEnabled()
-    if (reducedMotion || index > maxStaggerItems) {
-        Box(modifier = modifier) {
-            content()
-        }
-        return
-    }
-
     val clampedIndex = index.coerceIn(0, maxStaggerItems)
     val alpha = remember { Animatable(0f) }
-    val offsetY = remember { Animatable(20f) }
+    val offsetY = remember { Animatable(24f) }
 
     LaunchedEffect(Unit) {
-        delay(clampedIndex * 32L)
-        alpha.animateTo(1f, animationSpec = tween(240))
+        delay(clampedIndex * 35L)
+        alpha.animateTo(1f, animationSpec = tween(260))
     }
     LaunchedEffect(Unit) {
-        delay(clampedIndex * 32L)
+        delay(clampedIndex * 35L)
         offsetY.animateTo(
             targetValue = 0f,
             animationSpec = spring(
@@ -158,22 +123,11 @@ fun RollingScoreText(
     fontWeight: FontWeight? = null,
     modifier: Modifier = Modifier
 ) {
-    if (rememberReducedMotionEnabled()) {
-        Text(
-            text = text,
-            style = style,
-            color = color,
-            fontWeight = fontWeight,
-            modifier = modifier
-        )
-        return
-    }
-
     AnimatedContent(
         targetState = text,
         transitionSpec = {
-            (slideInVertically(tween(220)) { -it / 2 } + fadeIn(tween(180)))
-                .togetherWith(slideOutVertically(tween(180)) { it / 2 } + fadeOut(tween(150)))
+            (slideInVertically(tween(240)) { -it / 2 } + fadeIn(tween(200)))
+                .togetherWith(slideOutVertically(tween(200)) { it / 2 } + fadeOut(tween(160)))
         },
         label = "rollingScore",
         modifier = modifier
@@ -193,16 +147,15 @@ fun SmoothFadeVisibility(
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit
 ) {
-    val reducedMotion = rememberReducedMotionEnabled()
     AnimatedVisibility(
         visible = visible,
-        enter = if (reducedMotion) EnterTransition.None else fadeIn(tween(220)) + slideInVertically(
+        enter = fadeIn(tween(220)) + slideInVertically(
             animationSpec = spring(
                 dampingRatio = Spring.DampingRatioLowBouncy,
                 stiffness = Spring.StiffnessMediumLow
             )
         ) { it / 6 },
-        exit = if (reducedMotion) ExitTransition.None else fadeOut(tween(160)) + slideOutVertically(tween(160)) { it / 6 },
+        exit = fadeOut(tween(160)) + slideOutVertically(tween(160)) { it / 6 },
         modifier = modifier
     ) {
         content()

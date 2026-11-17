@@ -21,66 +21,55 @@ val KhateBaziTypography = Typography(
         fontFamily = VazirmatnFontFamily,
         fontWeight = FontWeight.ExtraBold,
         fontSize = 42.sp,
-        lineHeight = 50.sp,
-        letterSpacing = (-0.5).sp,
-        fontFeatureSettings = "tnum"
+        lineHeight = 52.sp
     ),
     displayMedium = TextStyle(
         fontFamily = VazirmatnFontFamily,
         fontWeight = FontWeight.ExtraBold,
         fontSize = 36.sp,
-        lineHeight = 44.sp,
-        letterSpacing = (-0.4).sp,
-        fontFeatureSettings = "tnum"
+        lineHeight = 44.sp
     ),
     displaySmall = TextStyle(
         fontFamily = VazirmatnFontFamily,
         fontWeight = FontWeight.ExtraBold,
         fontSize = 30.sp,
-        lineHeight = 36.sp,
-        fontFeatureSettings = "tnum"
+        lineHeight = 38.sp
     ),
     headlineLarge = TextStyle(
         fontFamily = VazirmatnFontFamily,
         fontWeight = FontWeight.ExtraBold,
         fontSize = 28.sp,
-        lineHeight = 34.sp,
-        fontFeatureSettings = "tnum"
+        lineHeight = 36.sp
     ),
     headlineMedium = TextStyle(
         fontFamily = VazirmatnFontFamily,
         fontWeight = FontWeight.ExtraBold,
         fontSize = 24.sp,
-        lineHeight = 30.sp,
-        fontFeatureSettings = "tnum"
+        lineHeight = 32.sp
     ),
     headlineSmall = TextStyle(
         fontFamily = VazirmatnFontFamily,
         fontWeight = FontWeight.Bold,
         fontSize = 20.sp,
-        lineHeight = 27.sp,
-        fontFeatureSettings = "tnum"
+        lineHeight = 28.sp
     ),
     titleLarge = TextStyle(
         fontFamily = VazirmatnFontFamily,
         fontWeight = FontWeight.Bold,
         fontSize = 18.sp,
-        lineHeight = 25.sp,
-        fontFeatureSettings = "tnum"
+        lineHeight = 26.sp
     ),
     titleMedium = TextStyle(
         fontFamily = VazirmatnFontFamily,
         fontWeight = FontWeight.Bold,
         fontSize = 15.sp,
-        lineHeight = 22.sp,
-        fontFeatureSettings = "tnum"
+        lineHeight = 22.sp
     ),
     titleSmall = TextStyle(
         fontFamily = VazirmatnFontFamily,
         fontWeight = FontWeight.SemiBold,
         fontSize = 13.sp,
-        lineHeight = 19.sp,
-        fontFeatureSettings = "tnum"
+        lineHeight = 19.sp
     ),
     bodyLarge = TextStyle(
         fontFamily = VazirmatnFontFamily,
@@ -104,21 +93,18 @@ val KhateBaziTypography = Typography(
         fontFamily = VazirmatnFontFamily,
         fontWeight = FontWeight.Bold,
         fontSize = 13.sp,
-        lineHeight = 18.sp,
-        fontFeatureSettings = "tnum"
+        lineHeight = 18.sp
     ),
     labelMedium = TextStyle(
         fontFamily = VazirmatnFontFamily,
         fontWeight = FontWeight.SemiBold,
         fontSize = 11.sp,
-        lineHeight = 15.sp,
-        fontFeatureSettings = "tnum"
+        lineHeight = 15.sp
     ),
     labelSmall = TextStyle(
         fontFamily = VazirmatnFontFamily,
         fontWeight = FontWeight.SemiBold,
         fontSize = 10.sp,
-        lineHeight = 14.sp,
-        fontFeatureSettings = "tnum"
+        lineHeight = 14.sp
     )
 )

@@ -104,7 +104,7 @@ fun HomeSportsNewsSection(
                         color = MaterialTheme.colorScheme.onBackground
                     )
                     Text(
-                        text = "خبرها و گزارش‌های ورزشی",
+                        text = "تازه‌ترین خبرها و گزارش‌ها",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

@@ -1254,7 +1254,7 @@ class SportsRepository {
                         summary = "",
                         link = fullLink,
                         imageUrl = imgUrl,
-                        publishedAtFa = "",
+                        publishedAtFa = "تازه",
                         sourceName = "ورزش سه",
                         category = classifyNewsCategory(headline, fullLink)
                     )
@@ -1305,7 +1305,7 @@ class SportsRepository {
         }
 
         private fun formatNewsTimeFa(rawDate: String): String {
-            if (rawDate.isBlank()) return ""
+            if (rawDate.isBlank()) return "تازه"
             val patterns = listOf(
                 "EEE, dd MMM yyyy HH:mm:ss Z",
                 "EEE, dd MMM yyyy HH:mm:ss z",
@@ -1316,7 +1316,7 @@ class SportsRepository {
                 runCatching {
                     SimpleDateFormat(pattern, Locale.US).parse(rawDate.trim())?.time
                 }.getOrNull()
-            } ?: return ""
+            } ?: return "تازه"
 
             val diffMin = ((System.currentTimeMillis() - millis) / 60_000L).coerceAtLeast(0L)
             return when {

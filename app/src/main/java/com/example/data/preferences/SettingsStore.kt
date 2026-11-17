@@ -10,7 +10,6 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.example.data.model.BroadcastSource
 import com.example.data.model.ConnectionSettings
-import com.example.data.model.FavoriteTeam
 import com.example.data.model.InstagramSession
 import com.example.data.model.NotificationSettings
 import com.example.data.model.WatchedMatch
@@ -38,7 +37,6 @@ class SettingsStore(private val context: Context) {
         val INSTAGRAM_USER_ID = stringPreferencesKey("instagram_user_id")
         val INSTAGRAM_USERNAME = stringPreferencesKey("instagram_username")
         val INSTAGRAM_USER_AGENT = stringPreferencesKey("instagram_user_agent")
-        val FAVORITE_TEAMS_JSON = stringPreferencesKey("favorite_teams_json")
     }
 
     val settingsFlow: Flow<ConnectionSettings> = context.dataStore.data.map { prefs ->
@@ -79,10 +77,6 @@ class SettingsStore(private val context: Context) {
             username = prefs[Keys.INSTAGRAM_USERNAME].orEmpty(),
             userAgent = prefs[Keys.INSTAGRAM_USER_AGENT].orEmpty()
         )
-    }
-
-    val favoriteTeamsFlow: Flow<List<FavoriteTeam>> = context.dataStore.data.map { prefs ->
-        decodeFavoriteTeams(prefs[Keys.FAVORITE_TEAMS_JSON])
     }
 
     suspend fun setSelectedSource(source: BroadcastSource) {
@@ -146,21 +140,6 @@ class SettingsStore(private val context: Context) {
         }
     }
 
-    suspend fun saveFavoriteTeams(teams: List<FavoriteTeam>) {
-        context.dataStore.edit { prefs ->
-            val arr = JSONArray()
-            teams.forEach { t ->
-                val obj = JSONObject()
-                obj.put("name", t.name)
-                obj.put("logoUrl", t.logoUrl)
-                obj.put("leagueTitle", t.leagueTitle)
-                obj.put("sport", t.sport)
-                arr.put(obj)
-            }
-            prefs[Keys.FAVORITE_TEAMS_JSON] = arr.toString()
-        }
-    }
-
     private fun encodeWatchedMatches(map: Map<String, WatchedMatch>): String {
         val array = JSONArray()
         map.values.forEach { m ->
@@ -215,28 +194,6 @@ class SettingsStore(private val context: Context) {
             }
             list
         }.getOrDefault(DEFAULT_INSTAGRAM_USERNAMES)
-    }
-
-    private fun decodeFavoriteTeams(raw: String?): List<FavoriteTeam> {
-        if (raw.isNullOrBlank()) return emptyList()
-        return runCatching {
-            val arr = JSONArray(raw)
-            val list = mutableListOf<FavoriteTeam>()
-            for (i in 0 until arr.length()) {
-                val obj = arr.optJSONObject(i) ?: continue
-                val name = obj.optString("name").trim()
-                if (name.isBlank()) continue
-                list.add(
-                    FavoriteTeam(
-                        name = name,
-                        logoUrl = obj.optString("logoUrl", ""),
-                        leagueTitle = obj.optString("leagueTitle", ""),
-                        sport = obj.optInt("sport", 1)
-                    )
-                )
-            }
-            list
-        }.getOrDefault(emptyList())
     }
 
     companion object {
