@@ -1,0 +1,6 @@
+{
+  "name": "خط بازی",
+  "description": "مرکز پخش زنده مسابقات ورزشی و نتایج لحظه‌به‌لحظه",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
